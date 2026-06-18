@@ -5,40 +5,34 @@ export async function proxy(request: NextRequest) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
-  // If env vars are not configured, skip auth entirely
-  if (!supabaseUrl || !supabaseKey || supabaseUrl === 'your_supabase_url') {
+  // Se as credenciais não estiverem configuradas, passa direto
+  if (!supabaseUrl || !supabaseKey || supabaseUrl.startsWith('your_')) {
     return NextResponse.next({ request })
   }
 
+  // Atualiza os cookies de sessão do Supabase para o SSR funcionar corretamente
   let supabaseResponse = NextResponse.next({ request })
 
-  const supabase = createServerClient(supabaseUrl, supabaseKey, {
-    cookies: {
-      getAll() {
-        return request.cookies.getAll()
+  try {
+    const supabase = createServerClient(supabaseUrl, supabaseKey, {
+      cookies: {
+        getAll() {
+          return request.cookies.getAll()
+        },
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value))
+          supabaseResponse = NextResponse.next({ request })
+          cookiesToSet.forEach(({ name, value, options }) =>
+            supabaseResponse.cookies.set(name, value, options)
+          )
+        },
       },
-      setAll(cookiesToSet) {
-        cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value))
-        supabaseResponse = NextResponse.next({ request })
-        cookiesToSet.forEach(({ name, value, options }) =>
-          supabaseResponse.cookies.set(name, value, options)
-        )
-      },
-    },
-  })
+    })
 
-  const { data: { user } } = await supabase.auth.getUser()
-  const pathname = request.nextUrl.pathname
-
-  const publicPaths = ['/', '/login', '/register']
-  const isPublic = publicPaths.includes(pathname)
-
-  if (!user && !isPublic) {
-    return NextResponse.redirect(new URL('/login', request.url))
-  }
-
-  if (user && (pathname === '/login' || pathname === '/register')) {
-    return NextResponse.redirect(new URL('/dashboard', request.url))
+    // Apenas atualiza a sessão — a proteção de rotas fica nos layouts
+    await supabase.auth.getSession()
+  } catch {
+    // Falha silenciosa: ainda passa a requisição normalmente
   }
 
   return supabaseResponse
