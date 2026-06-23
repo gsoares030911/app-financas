@@ -4,7 +4,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { TrendingUp, LayoutDashboard, List, LogOut, Menu, X } from 'lucide-react'
+import { TrendingUp, LayoutDashboard, List, LogOut, Menu, X, Users, Trophy, Ticket } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
 import type { User } from '@supabase/supabase-js'
@@ -13,6 +13,9 @@ import { cn } from '@/lib/utils'
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/dashboard/transactions', label: 'Transações', icon: List },
+  { href: '/dashboard/producers', label: 'Produtores', icon: Users },
+  { href: '/dashboard/bilheteria', label: 'Bilheteria Express', icon: Ticket },
+  { href: '/dashboard/rankings', label: 'Rankings', icon: Trophy },
 ]
 
 export default function Sidebar({ user }: { user: User }) {

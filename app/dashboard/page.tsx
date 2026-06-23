@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import DashboardClient from '@/components/dashboard/DashboardClient'
+import RecurringChargeAlert from '@/components/shared/RecurringChargeAlert'
 
 export default async function DashboardPage() {
   const supabase = await createClient()
@@ -11,5 +12,10 @@ export default async function DashboardPage() {
     .eq('user_id', user!.id)
     .order('date', { ascending: false })
 
-  return <DashboardClient transactions={transactions ?? []} />
+  return (
+    <>
+      <RecurringChargeAlert />
+      <DashboardClient transactions={transactions ?? []} />
+    </>
+  )
 }
