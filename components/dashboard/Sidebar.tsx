@@ -15,7 +15,7 @@ const ADMIN_NAV = [
   { href: '/dashboard',              label: 'Dashboard',         icon: LayoutDashboard },
   { href: '/dashboard/producers',    label: 'Produtores',        icon: Users },
   { href: '/dashboard/bilheteria',   label: 'Bilheteria Express',icon: Ticket },
-  { href: '/dashboard/rankings',     label: 'Rankings',          icon: Trophy },
+  { href: '/dashboard/rankings',     label: 'Dashboard',         icon: Trophy },
 ]
 
 const PRODUCER_NAV = [
