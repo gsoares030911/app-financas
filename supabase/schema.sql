@@ -146,7 +146,11 @@ create table if not exists public.account_entries (
   entry_type text not null check (entry_type in ('credito', 'debito')),
   category text not null check (category in (
     'venda_evento', 'adiantamento', 'anuncio', 'emprestimo',
-    'aluguel_equipamento', 'pagamento', 'outros'
+    'aluguel_equipamento', 'pagamento', 'outros',
+    'taxa_conveniencia',
+    'taxa_cartao_pix', 'taxa_dinheiro', 'taxa_servico',
+    'taxa_administrativa', 'taxa_impressao', 'voucher',
+    'juros_emprestimo', 'bonificacao'
   )),
   description text not null,
   amount numeric(12,2) not null check (amount > 0),

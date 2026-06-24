@@ -6,11 +6,14 @@ import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
-import { Plus, Pencil, Trash2, TrendingUp, TrendingDown, Wallet, Search } from 'lucide-react'
+import { Plus, Pencil, Trash2, TrendingUp, TrendingDown, Wallet, Search, Upload, ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react'
+import Link from 'next/link'
 import { toast } from 'sonner'
 import { PLATFORM_CATEGORY_LABELS } from '@/lib/types'
 import type { PlatformEntry } from '@/lib/types'
 import PlatformEntryDialog from './PlatformEntryDialog'
+import DateRangePicker from '@/components/shared/DateRangePicker'
+import type { DateRange } from 'react-day-picker'
 
 interface Props {
   initialEntries: PlatformEntry[]
@@ -29,14 +32,29 @@ export default function BilheteriaClient({ initialEntries }: Props) {
   const [editing, setEditing] = useState<PlatformEntry | null>(null)
   const [search, setSearch] = useState('')
   const [filterType, setFilterType] = useState<'all' | 'receita' | 'despesa'>('all')
+  const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined)
 
-  const totalReceita = entries.filter(e => e.entry_type === 'receita').reduce((s, e) => s + Number(e.amount), 0)
-  const totalDespesa = entries.filter(e => e.entry_type === 'despesa').reduce((s, e) => s + Number(e.amount), 0)
-  const saldo = totalReceita - totalDespesa
+  type BilhSortCol = 'date' | 'description' | 'category' | 'amount'
+  const [sort, setSort] = useState<{ col: BilhSortCol; dir: 'asc' | 'desc' }>({ col: 'date', dir: 'desc' })
+  function toggleSort(col: BilhSortCol) {
+    setSort(prev => prev.col === col ? { col, dir: prev.dir === 'asc' ? 'desc' : 'asc' } : { col, dir: 'asc' })
+  }
+  function SortIcon({ col }: { col: BilhSortCol }) {
+    if (sort.col !== col) return <ChevronsUpDown className="h-3 w-3 ml-1 text-gray-400" />
+    return sort.dir === 'asc'
+      ? <ChevronUp className="h-3 w-3 ml-1 text-blue-600" />
+      : <ChevronDown className="h-3 w-3 ml-1 text-blue-600" />
+  }
 
   const filtered = useMemo(() => {
-    return entries
+    const base = entries
       .filter(e => filterType === 'all' || e.entry_type === filterType)
+      .filter(e => {
+        if (!dateRange?.from) return true
+        const d = new Date(e.date + 'T12:00:00')
+        if (dateRange.to) return d >= dateRange.from && d <= dateRange.to
+        return d >= dateRange.from
+      })
       .filter(e => {
         if (!search.trim()) return true
         const q = search.toLowerCase()
@@ -45,8 +63,15 @@ export default function BilheteriaClient({ initialEntries }: Props) {
           PLATFORM_CATEGORY_LABELS[e.category].toLowerCase().includes(q)
         )
       })
-      .sort((a, b) => b.date.localeCompare(a.date))
-  }, [entries, filterType, search])
+    return base.sort((a, b) => {
+      let cmp = 0
+      if (sort.col === 'date') cmp = a.date.localeCompare(b.date)
+      else if (sort.col === 'description') cmp = a.description.localeCompare(b.description)
+      else if (sort.col === 'category') cmp = PLATFORM_CATEGORY_LABELS[a.category].localeCompare(PLATFORM_CATEGORY_LABELS[b.category])
+      else if (sort.col === 'amount') cmp = Number(a.amount) - Number(b.amount)
+      return sort.dir === 'asc' ? cmp : -cmp
+    })
+  }, [entries, filterType, search, sort, dateRange])
 
   function openNew() {
     setEditing(null)
@@ -83,6 +108,10 @@ export default function BilheteriaClient({ initialEntries }: Props) {
       .order('date', { ascending: false })
     if (data) setEntries(data as PlatformEntry[])
   }
+
+  const totalReceita = filtered.filter(e => e.entry_type === 'receita').reduce((s, e) => s + Number(e.amount), 0)
+  const totalDespesa = filtered.filter(e => e.entry_type === 'despesa').reduce((s, e) => s + Number(e.amount), 0)
+  const saldo = totalReceita - totalDespesa
 
   return (
     <div className="space-y-6">
@@ -139,8 +168,13 @@ export default function BilheteriaClient({ initialEntries }: Props) {
               </button>
             ))}
           </div>
-          <div className="flex gap-2 w-full sm:w-auto">
-            <div className="relative flex-1 sm:w-56">
+          <div className="flex gap-2 w-full sm:w-auto flex-wrap">
+            <DateRangePicker
+              value={dateRange}
+              onChange={setDateRange}
+              align="end"
+            />
+            <div className="relative flex-1 sm:w-48">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
               <Input
                 value={search}
@@ -149,6 +183,12 @@ export default function BilheteriaClient({ initialEntries }: Props) {
                 className="pl-8 h-8 text-sm"
               />
             </div>
+            <Link href="/dashboard/bilheteria/import">
+              <Button size="sm" variant="outline">
+                <Upload className="h-4 w-4 mr-1" />
+                Importar
+              </Button>
+            </Link>
             <Button size="sm" onClick={openNew}>
               <Plus className="h-4 w-4 mr-1" />
               Novo
@@ -170,10 +210,25 @@ export default function BilheteriaClient({ initialEntries }: Props) {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b bg-gray-50">
-                  <th className="px-4 py-3 text-left font-medium text-gray-600 w-24">Data</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-600">Descrição</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-600 hidden sm:table-cell">Categoria</th>
-                  <th className="px-4 py-3 text-right font-medium text-gray-600 w-32">Valor</th>
+                  {(
+                    [
+                      { col: 'date', label: 'Data', cls: 'w-24 text-left' },
+                      { col: 'description', label: 'Descrição', cls: 'text-left' },
+                      { col: 'category', label: 'Categoria', cls: 'text-left hidden sm:table-cell' },
+                      { col: 'amount', label: 'Valor', cls: 'text-right w-32' },
+                    ] as { col: BilhSortCol; label: string; cls: string }[]
+                  ).map(({ col, label, cls }) => (
+                    <th
+                      key={col}
+                      onClick={() => toggleSort(col)}
+                      className={`px-4 py-3 font-medium text-gray-600 cursor-pointer select-none hover:bg-gray-100 transition-colors ${cls}`}
+                    >
+                      <span className={`inline-flex items-center gap-0.5 ${cls.includes('text-right') ? 'justify-end w-full' : ''}`}>
+                        {label}
+                        <SortIcon col={col} />
+                      </span>
+                    </th>
+                  ))}
                   <th className="px-4 py-3 text-right font-medium text-gray-600 w-20"></th>
                 </tr>
               </thead>

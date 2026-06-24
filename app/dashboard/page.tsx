@@ -1,21 +1,10 @@
-import { createClient } from '@/lib/supabase/server'
-import DashboardClient from '@/components/dashboard/DashboardClient'
-import RecurringChargeAlert from '@/components/shared/RecurringChargeAlert'
-
-export default async function DashboardPage() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-
-  const { data: transactions } = await supabase
-    .from('transactions')
-    .select('*')
-    .eq('user_id', user!.id)
-    .order('date', { ascending: false })
-
+export default function DashboardPage() {
   return (
-    <>
-      <RecurringChargeAlert />
-      <DashboardClient transactions={transactions ?? []} />
-    </>
+    <div className="flex items-center justify-center min-h-[60vh]">
+      <div className="text-center text-gray-400">
+        <p className="text-lg font-medium">Dashboard em construção</p>
+        <p className="text-sm mt-1">Em breve</p>
+      </div>
+    </div>
   )
 }

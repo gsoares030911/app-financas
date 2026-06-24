@@ -5,7 +5,10 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
   ArrowLeft, Plus, Edit2, Trash2, Mail, Phone, Building2, Hash,
+  ChevronUp, ChevronDown, ChevronsUpDown,
 } from 'lucide-react'
+import DateRangePicker from '@/components/shared/DateRangePicker'
+import type { DateRange } from 'react-day-picker'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -15,8 +18,8 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table'
 import { formatCurrency, formatDate } from '@/lib/utils/format'
-import { CATEGORY_LABELS } from '@/lib/types'
-import type { Producer, AccountEntry, ProducerEvent, EquipmentRental } from '@/lib/types'
+import { CATEGORY_LABELS, CATEGORY_COLORS, SYSTEM_CATEGORIES } from '@/lib/types'
+import type { Producer, AccountEntry, ProducerEvent, EquipmentRental, Category } from '@/lib/types'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
 import EntryDialog from './EntryDialog'
@@ -29,19 +32,15 @@ interface Props {
   entries: AccountEntry[]
   events: ProducerEvent[]
   rentals: EquipmentRental[]
+  categories?: Category[]
 }
 
-const CATEGORY_BADGE: Record<string, string> = {
-  venda_evento: 'bg-green-100 text-green-700',
-  adiantamento: 'bg-orange-100 text-orange-700',
-  anuncio: 'bg-purple-100 text-purple-700',
-  emprestimo: 'bg-yellow-100 text-yellow-700',
-  aluguel_equipamento: 'bg-blue-100 text-blue-700',
-  pagamento: 'bg-teal-100 text-teal-700',
-  outros: 'bg-gray-100 text-gray-700',
-}
 
-export default function ProducerStatementClient({ producer: initialProducer, entries, events, rentals }: Props) {
+export default function ProducerStatementClient({ producer: initialProducer, entries, events, rentals, categories: propCategories }: Props) {
+  const systemCats = SYSTEM_CATEGORIES.map(c => ({ ...c, id: c.slug, user_id: '', created_at: '' }))
+  const cats = (propCategories && propCategories.length > 0) ? propCategories : systemCats
+  const catLabels: Record<string, string> = Object.fromEntries(cats.map(c => [c.slug, c.name]))
+  const catBadge: Record<string, string> = Object.fromEntries(cats.map(c => [c.slug, CATEGORY_COLORS[c.color] ?? CATEGORY_COLORS.gray]))
   const router = useRouter()
   const supabase = createClient()
 
@@ -55,9 +54,48 @@ export default function ProducerStatementClient({ producer: initialProducer, ent
   const [editRental, setEditRental] = useState<EquipmentRental | null>(null)
   const [filterType, setFilterType] = useState('all')
   const [filterCategory, setFilterCategory] = useState('all')
+  const [extratDateRange, setExtratDateRange] = useState<DateRange | undefined>(undefined)
+  const [eventDateRange, setEventDateRange] = useState<DateRange | undefined>(undefined)
+  const [cardDateRange, setCardDateRange] = useState<DateRange | undefined>(undefined)
+  const [selectedEventIds, setSelectedEventIds] = useState<Set<string>>(new Set())
 
-  const totalCredits = entries.filter(e => e.entry_type === 'credito').reduce((s, e) => s + e.amount, 0)
-  const totalDebits = entries.filter(e => e.entry_type === 'debito').reduce((s, e) => s + e.amount, 0)
+  function SortIcon({ active, dir }: { active: boolean; dir: 'asc' | 'desc' }) {
+    if (!active) return <ChevronsUpDown className="h-3 w-3 ml-1 text-gray-400" />
+    return dir === 'asc'
+      ? <ChevronUp className="h-3 w-3 ml-1 text-blue-600" />
+      : <ChevronDown className="h-3 w-3 ml-1 text-blue-600" />
+  }
+
+  type EventSortCol = 'name' | 'event_date' | 'gross_revenue' | 'platform_fee' | 'net_amount' | 'status'
+  const [eventSort, setEventSort] = useState<{ col: EventSortCol; dir: 'asc' | 'desc' }>({ col: 'event_date', dir: 'desc' })
+  function toggleEventSort(col: EventSortCol) {
+    setEventSort(prev => prev.col === col ? { col, dir: prev.dir === 'asc' ? 'desc' : 'asc' } : { col, dir: 'asc' })
+  }
+
+  type ExtratSortCol = 'date' | 'description' | 'category' | 'amount' | 'balance'
+  const [extratSort, setExtratSort] = useState<{ col: ExtratSortCol; dir: 'asc' | 'desc' }>({ col: 'date', dir: 'desc' })
+  function toggleExtratSort(col: ExtratSortCol) {
+    setExtratSort(prev => prev.col === col ? { col, dir: prev.dir === 'asc' ? 'desc' : 'asc' } : { col, dir: 'asc' })
+  }
+
+  type EquipSortCol = 'equipment_name' | 'monthly_amount' | 'billing_day' | 'start_date' | 'end_date' | 'is_active'
+  const [equipSort, setEquipSort] = useState<{ col: EquipSortCol; dir: 'asc' | 'desc' }>({ col: 'start_date', dir: 'desc' })
+  function toggleEquipSort(col: EquipSortCol) {
+    setEquipSort(prev => prev.col === col ? { col, dir: prev.dir === 'asc' ? 'desc' : 'asc' } : { col, dir: 'asc' })
+  }
+
+  const cardEntries = useMemo(() => {
+    if (!cardDateRange?.from) return entries
+    return entries.filter(e => {
+      const d = new Date(e.date + 'T12:00:00')
+      if (cardDateRange.to) return d >= cardDateRange.from! && d <= cardDateRange.to
+      return d >= cardDateRange.from!
+    })
+  }, [entries, cardDateRange])
+
+  const totalCredits = cardEntries.filter(e => e.entry_type === 'credito').reduce((s, e) => s + e.amount, 0)
+  const totalDebits  = cardEntries.filter(e => e.entry_type === 'debito').reduce((s, e) => s + e.amount, 0)
+  const totalBonus   = cardEntries.filter(e => e.category === 'bonificacao' && e.entry_type === 'credito').reduce((s, e) => s + e.amount, 0)
   const balance = totalCredits - totalDebits
 
   // Compute running balance on all entries, then filter for display
@@ -77,11 +115,74 @@ export default function ProducerStatementClient({ producer: initialProducer, ent
       .filter(e => {
         if (filterType !== 'all' && e.entry_type !== filterType) return false
         if (filterCategory !== 'all' && e.category !== filterCategory) return false
+        if (extratDateRange?.from) {
+          const d = new Date(e.date + 'T12:00:00')
+          if (extratDateRange.to) { if (!(d >= extratDateRange.from && d <= extratDateRange.to)) return false }
+          else { if (d < extratDateRange.from) return false }
+        }
         return true
       })
       .slice()
       .reverse()
-  }, [allWithBalance, filterType, filterCategory])
+  }, [allWithBalance, filterType, filterCategory, extratDateRange])
+
+  const sortedDisplayEntries = useMemo(() => {
+    return [...displayEntries].sort((a, b) => {
+      const { col, dir } = extratSort
+      let cmp = 0
+      if (col === 'date') cmp = a.date.localeCompare(b.date)
+      else if (col === 'description') cmp = a.description.localeCompare(b.description)
+      else if (col === 'category') cmp = a.category.localeCompare(b.category)
+      else if (col === 'amount') cmp = a.amount - b.amount
+      else if (col === 'balance') cmp = a.runningBalance - b.runningBalance
+      return dir === 'asc' ? cmp : -cmp
+    })
+  }, [displayEntries, extratSort])
+
+  const bonusPerEvent = useMemo(() => {
+    const map = new Map<string, number>()
+    for (const e of entries) {
+      if (e.category === 'bonificacao' && e.entry_type === 'credito' && e.event_id) {
+        map.set(e.event_id, (map.get(e.event_id) ?? 0) + e.amount)
+      }
+    }
+    return map
+  }, [entries])
+
+  const sortedEvents = useMemo(() => {
+    return [...events]
+      .filter(ev => {
+        if (!eventDateRange?.from) return true
+        const d = new Date(ev.event_date + 'T12:00:00')
+        if (eventDateRange.to) return d >= eventDateRange.from && d <= eventDateRange.to
+        return d >= eventDateRange.from
+      })
+      .sort((a, b) => {
+        const { col, dir } = eventSort
+        let cmp = 0
+        if (col === 'name') cmp = a.name.localeCompare(b.name)
+        else if (col === 'event_date') cmp = a.event_date.localeCompare(b.event_date)
+        else if (col === 'gross_revenue') cmp = a.gross_revenue - b.gross_revenue
+        else if (col === 'platform_fee') cmp = a.platform_fee - b.platform_fee
+        else if (col === 'net_amount') cmp = a.net_amount - b.net_amount
+        else if (col === 'status') cmp = a.status.localeCompare(b.status)
+        return dir === 'asc' ? cmp : -cmp
+      })
+  }, [events, eventSort, eventDateRange])
+
+  const sortedRentals = useMemo(() => {
+    return [...rentals].sort((a, b) => {
+      const { col, dir } = equipSort
+      let cmp = 0
+      if (col === 'equipment_name') cmp = a.equipment_name.localeCompare(b.equipment_name)
+      else if (col === 'monthly_amount') cmp = a.monthly_amount - b.monthly_amount
+      else if (col === 'billing_day') cmp = a.billing_day - b.billing_day
+      else if (col === 'start_date') cmp = a.start_date.localeCompare(b.start_date)
+      else if (col === 'end_date') cmp = (a.end_date ?? '').localeCompare(b.end_date ?? '')
+      else if (col === 'is_active') cmp = Number(b.is_active) - Number(a.is_active)
+      return dir === 'asc' ? cmp : -cmp
+    })
+  }, [rentals, equipSort])
 
   async function deleteEntry(id: string) {
     if (!confirm('Excluir este lançamento?')) return
@@ -102,6 +203,36 @@ export default function ProducerStatementClient({ producer: initialProducer, ent
     const { error } = await supabase.from('equipment_rentals').delete().eq('id', id)
     if (error) toast.error('Erro ao excluir')
     else { toast.success('Aluguel excluído'); router.refresh() }
+  }
+
+  async function bulkSettle(status: 'settled' | 'pending') {
+    const ids = [...selectedEventIds]
+    if (ids.length === 0) return
+    const label = status === 'settled' ? 'Liquidado' : 'Pendente'
+    if (!confirm(`Alterar ${ids.length} evento(s) para "${label}"?`)) return
+    const { error } = await supabase.from('events').update({ status }).in('id', ids)
+    if (error) toast.error('Erro ao atualizar status')
+    else {
+      toast.success(`${ids.length} evento(s) marcados como ${label}`)
+      setSelectedEventIds(new Set())
+      router.refresh()
+    }
+  }
+
+  function toggleSelectEvent(id: string) {
+    setSelectedEventIds(prev => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
+
+  function toggleSelectAll() {
+    if (selectedEventIds.size === sortedEvents.length && sortedEvents.length > 0) {
+      setSelectedEventIds(new Set())
+    } else {
+      setSelectedEventIds(new Set(sortedEvents.map(e => e.id)))
+    }
   }
 
   return (
@@ -126,22 +257,32 @@ export default function ProducerStatementClient({ producer: initialProducer, ent
       {/* Balance + Info */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <Card className={`${balance >= 0 ? 'border-green-200 bg-green-50/50' : 'border-red-200 bg-red-50/50'}`}>
-          <CardContent className="pt-6">
+          <CardContent className="pt-4">
+            <div className="flex justify-center mb-3">
+              <DateRangePicker value={cardDateRange} onChange={setCardDateRange} />
+            </div>
             <div className="text-center">
+              <p className="text-xs font-medium text-gray-400 mb-0.5">
+                {cardDateRange?.from ? 'Período selecionado' : 'Acumulado total'}
+              </p>
               <p className="text-sm font-medium text-gray-500 mb-1">
                 {balance >= 0 ? 'A Pagar ao Produtor' : 'Produtor Deve'}
               </p>
               <p className={`text-3xl font-bold ${balance >= 0 ? 'text-green-700' : 'text-red-700'}`}>
                 {formatCurrency(Math.abs(balance))}
               </p>
-              <div className="flex justify-center gap-8 mt-4 text-xs text-gray-500">
+              <div className="flex justify-center gap-6 mt-4 text-xs text-gray-500">
                 <div className="text-center">
                   <p className="text-green-600 font-semibold text-sm">{formatCurrency(totalCredits)}</p>
-                  <p>Créditos</p>
+                  <p>Valor Bruto</p>
                 </div>
                 <div className="text-center">
                   <p className="text-red-600 font-semibold text-sm">{formatCurrency(totalDebits)}</p>
-                  <p>Débitos</p>
+                  <p>Desconto de venda</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-blue-600 font-semibold text-sm">{formatCurrency(totalBonus)}</p>
+                  <p>BV</p>
                 </div>
               </div>
             </div>
@@ -195,16 +336,17 @@ export default function ProducerStatementClient({ producer: initialProducer, ent
       {/* Tabs */}
       <Tabs defaultValue="extrato">
         <TabsList>
-          <TabsTrigger value="extrato">Extrato ({entries.length})</TabsTrigger>
-          <TabsTrigger value="eventos">Eventos ({events.length})</TabsTrigger>
+          <TabsTrigger value="extrato">Extrato ({sortedDisplayEntries.length})</TabsTrigger>
+          <TabsTrigger value="eventos">Eventos ({sortedEvents.length})</TabsTrigger>
           <TabsTrigger value="equipamentos">Equipamentos ({rentals.length})</TabsTrigger>
         </TabsList>
 
         {/* ── Extrato ── */}
         <TabsContent value="extrato" className="space-y-4 mt-4">
-          <div className="flex flex-col sm:flex-row gap-2 sm:items-center justify-between">
-            <div className="flex gap-2">
-              <Select value={filterType} onValueChange={setFilterType}>
+          <div className="flex flex-col sm:flex-row gap-2 sm:items-center justify-between flex-wrap">
+            <div className="flex gap-2 flex-wrap">
+              <DateRangePicker value={extratDateRange} onChange={setExtratDateRange} />
+              <Select value={filterType} onValueChange={v => v && setFilterType(v)}>
                 <SelectTrigger className="w-36">
                   <SelectValue placeholder="Tipo" />
                 </SelectTrigger>
@@ -214,15 +356,16 @@ export default function ProducerStatementClient({ producer: initialProducer, ent
                   <SelectItem value="debito">Débitos</SelectItem>
                 </SelectContent>
               </Select>
-              <Select value={filterCategory} onValueChange={setFilterCategory}>
+              <Select value={filterCategory} onValueChange={v => v && setFilterCategory(v)}>
                 <SelectTrigger className="w-48">
                   <SelectValue placeholder="Categoria" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todas</SelectItem>
-                  {Object.entries(CATEGORY_LABELS).map(([k, v]) => (
+                  {cats.filter(c => c.is_active).map(c => ({ k: c.slug, v: c.name })).map(({ k, v }) => (
                     <SelectItem key={k} value={k}>{v}</SelectItem>
                   ))}
+
                 </SelectContent>
               </Select>
             </div>
@@ -237,23 +380,38 @@ export default function ProducerStatementClient({ producer: initialProducer, ent
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Data</TableHead>
-                    <TableHead>Descrição</TableHead>
-                    <TableHead>Categoria</TableHead>
-                    <TableHead className="text-right">Valor</TableHead>
-                    <TableHead className="text-right">Saldo</TableHead>
+                    {(
+                      [
+                        { col: 'date', label: 'Data', align: 'left' },
+                        { col: 'description', label: 'Descrição', align: 'left' },
+                        { col: 'category', label: 'Categoria', align: 'left' },
+                        { col: 'amount', label: 'Valor', align: 'right' },
+                        { col: 'balance', label: 'Saldo', align: 'right' },
+                      ] as { col: ExtratSortCol; label: string; align: 'left' | 'right' }[]
+                    ).map(({ col, label, align }) => (
+                      <TableHead
+                        key={col}
+                        className={`cursor-pointer select-none hover:bg-gray-100 transition-colors ${align === 'right' ? 'text-right' : ''}`}
+                        onClick={() => toggleExtratSort(col)}
+                      >
+                        <span className={`inline-flex items-center gap-0.5 ${align === 'right' ? 'justify-end w-full' : ''}`}>
+                          {label}
+                          <SortIcon active={extratSort.col === col} dir={extratSort.dir} />
+                        </span>
+                      </TableHead>
+                    ))}
                     <TableHead className="w-16" />
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {displayEntries.length === 0 ? (
+                  {sortedDisplayEntries.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={6} className="text-center text-gray-400 py-10 text-sm">
                         Nenhum lançamento encontrado
                       </TableCell>
                     </TableRow>
                   ) : (
-                    displayEntries.map(e => (
+                    sortedDisplayEntries.map(e => (
                       <TableRow key={e.id}>
                         <TableCell className="text-sm text-gray-500 whitespace-nowrap">
                           {formatDate(e.date)}
@@ -262,11 +420,13 @@ export default function ProducerStatementClient({ producer: initialProducer, ent
                           {e.description}
                         </TableCell>
                         <TableCell>
-                          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${CATEGORY_BADGE[e.category] ?? 'bg-gray-100 text-gray-700'}`}>
-                            {CATEGORY_LABELS[e.category]}
+                          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${catBadge[e.category] ?? 'bg-gray-100 text-gray-700'}`}>
+                            {catLabels[e.category]}
                           </span>
                         </TableCell>
-                        <TableCell className={`text-right font-semibold text-sm whitespace-nowrap ${e.entry_type === 'credito' ? 'text-green-600' : 'text-red-600'}`}>
+                        <TableCell className={`text-right font-semibold text-sm whitespace-nowrap ${
+                          e.category === 'bonificacao' ? 'text-blue-600' : e.entry_type === 'credito' ? 'text-green-600' : 'text-red-600'
+                        }`}>
                           {e.entry_type === 'credito' ? '+' : '−'}{formatCurrency(e.amount)}
                         </TableCell>
                         <TableCell className={`text-right text-sm whitespace-nowrap font-medium ${e.runningBalance >= 0 ? 'text-gray-700' : 'text-red-600'}`}>
@@ -293,40 +453,117 @@ export default function ProducerStatementClient({ producer: initialProducer, ent
 
         {/* ── Eventos ── */}
         <TabsContent value="eventos" className="space-y-4 mt-4">
-          <div className="flex justify-end">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <DateRangePicker value={eventDateRange} onChange={setEventDateRange} />
             <Button onClick={() => { setEditEvent(null); setEventOpen(true) }}>
               <Plus className="h-4 w-4 mr-2" />
               Novo Evento
             </Button>
           </div>
+
+          {/* Barra de ação em massa */}
+          {selectedEventIds.size > 0 && (
+            <div className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-xl px-4 py-3">
+              <span className="text-sm font-medium text-blue-700">
+                {selectedEventIds.size} evento{selectedEventIds.size !== 1 ? 's' : ''} selecionado{selectedEventIds.size !== 1 ? 's' : ''}
+              </span>
+              <div className="flex gap-2 ml-auto">
+                <Button size="sm" variant="outline" onClick={() => bulkSettle('pending')} className="text-gray-600 border-gray-300">
+                  Marcar Pendente
+                </Button>
+                <Button size="sm" onClick={() => bulkSettle('settled')} className="bg-green-600 hover:bg-green-700 text-white">
+                  Liquidar selecionados
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => setSelectedEventIds(new Set())} className="text-gray-400">
+                  Cancelar
+                </Button>
+              </div>
+            </div>
+          )}
+
           <Card>
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Evento</TableHead>
-                    <TableHead>Data</TableHead>
-                    <TableHead className="text-right">Bruto</TableHead>
-                    <TableHead className="text-right">Taxa</TableHead>
-                    <TableHead className="text-right">Líquido</TableHead>
-                    <TableHead>Status</TableHead>
+                    <TableHead className="w-10">
+                      <input
+                        type="checkbox"
+                        className="rounded"
+                        checked={sortedEvents.length > 0 && selectedEventIds.size === sortedEvents.length}
+                        onChange={toggleSelectAll}
+                      />
+                    </TableHead>
+                    {([
+                      { col: 'name',          label: 'Evento',  align: 'left'  },
+                      { col: 'event_date',    label: 'Data',    align: 'left'  },
+                      { col: 'gross_revenue', label: 'Bruto',   align: 'right' },
+                      { col: 'platform_fee',  label: 'Taxa',    align: 'right' },
+                    ] as { col: EventSortCol; label: string; align: 'left' | 'right' }[]).map(({ col, label, align }) => (
+                      <TableHead key={col}
+                        className={`cursor-pointer select-none hover:bg-gray-100 transition-colors ${align === 'right' ? 'text-right' : ''}`}
+                        onClick={() => toggleEventSort(col)}
+                      >
+                        <span className={`inline-flex items-center gap-0.5 ${align === 'right' ? 'justify-end w-full' : ''}`}>
+                          {label}<SortIcon active={eventSort.col === col} dir={eventSort.dir} />
+                        </span>
+                      </TableHead>
+                    ))}
+                    <TableHead className="text-right text-orange-600 font-medium cursor-pointer select-none hover:bg-gray-100"
+                      onClick={() => toggleEventSort('net_amount')}>
+                      <span className="inline-flex items-center gap-0.5 justify-end w-full">
+                        Desconto<SortIcon active={false} dir="asc" />
+                      </span>
+                    </TableHead>
+                    <TableHead className="text-right text-blue-600 font-medium">BV</TableHead>
+                    {([
+                      { col: 'net_amount', label: 'Líquido', align: 'right' },
+                      { col: 'status',     label: 'Status',  align: 'left'  },
+                    ] as { col: EventSortCol; label: string; align: 'left' | 'right' }[]).map(({ col, label, align }) => (
+                      <TableHead key={col}
+                        className={`cursor-pointer select-none hover:bg-gray-100 transition-colors ${align === 'right' ? 'text-right' : ''}`}
+                        onClick={() => toggleEventSort(col)}
+                      >
+                        <span className={`inline-flex items-center gap-0.5 ${align === 'right' ? 'justify-end w-full' : ''}`}>
+                          {label}<SortIcon active={eventSort.col === col} dir={eventSort.dir} />
+                        </span>
+                      </TableHead>
+                    ))}
                     <TableHead className="w-16" />
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {events.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={7} className="text-center text-gray-400 py-10 text-sm">
+                      <TableCell colSpan={10} className="text-center text-gray-400 py-10 text-sm">
                         Nenhum evento cadastrado
                       </TableCell>
                     </TableRow>
                   ) : (
-                    events.map(ev => (
-                      <TableRow key={ev.id}>
+                    sortedEvents.map(ev => {
+                      const bv = bonusPerEvent.get(ev.id) ?? 0
+                      const desconto = ev.gross_revenue - ev.net_amount
+                      const isSelected = selectedEventIds.has(ev.id)
+                      return (
+                      <TableRow key={ev.id} className={isSelected ? 'bg-blue-50/50' : ''}>
+                        <TableCell>
+                          <input
+                            type="checkbox"
+                            className="rounded"
+                            checked={isSelected}
+                            onChange={() => toggleSelectEvent(ev.id)}
+                          />
+                        </TableCell>
                         <TableCell className="font-medium text-sm">{ev.name}</TableCell>
                         <TableCell className="text-sm text-gray-500 whitespace-nowrap">{formatDate(ev.event_date)}</TableCell>
                         <TableCell className="text-right text-sm">{formatCurrency(ev.gross_revenue)}</TableCell>
                         <TableCell className="text-right text-sm text-red-500">{formatCurrency(ev.platform_fee)}</TableCell>
+                        <TableCell className="text-right text-sm text-orange-600">
+                          {desconto > 0 ? formatCurrency(desconto) : '—'}
+                        </TableCell>
+                        <TableCell className="text-right text-sm text-blue-600">
+                          {bv > 0 ? formatCurrency(bv) : '—'}
+                        </TableCell>
                         <TableCell className="text-right text-sm font-semibold text-green-600">{formatCurrency(ev.net_amount)}</TableCell>
                         <TableCell>
                           <Badge variant={ev.status === 'settled' ? 'default' : 'secondary'}>
@@ -344,7 +581,8 @@ export default function ProducerStatementClient({ producer: initialProducer, ent
                           </div>
                         </TableCell>
                       </TableRow>
-                    ))
+                      )
+                    })
                   )}
                 </TableBody>
               </Table>
@@ -365,12 +603,27 @@ export default function ProducerStatementClient({ producer: initialProducer, ent
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Equipamento</TableHead>
-                    <TableHead className="text-right">Mensal</TableHead>
-                    <TableHead>Dia</TableHead>
-                    <TableHead>Início</TableHead>
-                    <TableHead>Fim</TableHead>
-                    <TableHead>Status</TableHead>
+                    {(
+                      [
+                        { col: 'equipment_name', label: 'Equipamento', align: 'left' },
+                        { col: 'monthly_amount', label: 'Mensal', align: 'right' },
+                        { col: 'billing_day', label: 'Dia', align: 'left' },
+                        { col: 'start_date', label: 'Início', align: 'left' },
+                        { col: 'end_date', label: 'Fim', align: 'left' },
+                        { col: 'is_active', label: 'Status', align: 'left' },
+                      ] as { col: EquipSortCol; label: string; align: 'left' | 'right' }[]
+                    ).map(({ col, label, align }) => (
+                      <TableHead
+                        key={col}
+                        className={`cursor-pointer select-none hover:bg-gray-100 transition-colors ${align === 'right' ? 'text-right' : ''}`}
+                        onClick={() => toggleEquipSort(col)}
+                      >
+                        <span className={`inline-flex items-center gap-0.5 ${align === 'right' ? 'justify-end w-full' : ''}`}>
+                          {label}
+                          <SortIcon active={equipSort.col === col} dir={equipSort.dir} />
+                        </span>
+                      </TableHead>
+                    ))}
                     <TableHead className="w-16" />
                   </TableRow>
                 </TableHeader>
@@ -382,7 +635,7 @@ export default function ProducerStatementClient({ producer: initialProducer, ent
                       </TableCell>
                     </TableRow>
                   ) : (
-                    rentals.map(r => (
+                    sortedRentals.map(r => (
                       <TableRow key={r.id}>
                         <TableCell className="font-medium text-sm">{r.equipment_name}</TableCell>
                         <TableCell className="text-right text-sm font-semibold">{formatCurrency(r.monthly_amount)}</TableCell>
@@ -422,6 +675,7 @@ export default function ProducerStatementClient({ producer: initialProducer, ent
         entry={editEntry}
         events={events}
         rentals={rentals}
+        categories={cats}
       />
       <EventDialog
         open={eventOpen}

@@ -12,11 +12,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
 import {
-  CATEGORY_LABELS, CREDIT_CATEGORIES, DEBIT_CATEGORIES,
+  CATEGORY_LABELS, CREDIT_CATEGORIES, DEBIT_CATEGORIES, SYSTEM_CATEGORIES,
 } from '@/lib/types'
 import type {
   AccountEntry, AccountEntryFormData, AccountEntryCategory, EntryType,
-  ProducerEvent, EquipmentRental,
+  ProducerEvent, EquipmentRental, Category,
 } from '@/lib/types'
 import ProducerSplitSection, { type ProducerSplitItem } from './ProducerSplitSection'
 
@@ -27,6 +27,7 @@ interface Props {
   entry: AccountEntry | null
   events: ProducerEvent[]
   rentals: EquipmentRental[]
+  categories?: Category[]
 }
 
 const today = new Date().toISOString().split('T')[0]
@@ -42,7 +43,12 @@ const EMPTY: AccountEntryFormData = {
   reference_month: null,
 }
 
-export default function EntryDialog({ open, onOpenChange, producerId, entry, events, rentals }: Props) {
+export default function EntryDialog({ open, onOpenChange, producerId, entry, events, rentals, categories: propCategories }: Props) {
+  const allCats = propCategories ?? SYSTEM_CATEGORIES.map(c => ({ ...c, id: c.slug, user_id: '', created_at: '' }))
+  const activeCats = allCats.filter(c => c.is_active)
+  const dynLabels: Record<string, string> = Object.fromEntries(activeCats.map(c => [c.slug, c.name]))
+  const dynCredit = activeCats.filter(c => c.entry_type === 'credito' || c.entry_type === 'ambos').map(c => c.slug)
+  const dynDebit  = activeCats.filter(c => c.entry_type === 'debito'  || c.entry_type === 'ambos').map(c => c.slug)
   const router = useRouter()
   const supabase = createClient()
   const [form, setForm] = useState<AccountEntryFormData>(EMPTY)
@@ -119,7 +125,7 @@ export default function EntryDialog({ open, onOpenChange, producerId, entry, eve
     }
   }
 
-  const categories = form.entry_type === 'credito' ? CREDIT_CATEGORIES : DEBIT_CATEGORIES
+  const categories = form.entry_type === 'credito' ? dynCredit : dynDebit
   const isSplitEligible = form.entry_type === 'credito' && form.category === 'venda_evento'
   const netAmount = Number(form.amount) || 0
   const totalOtherPct = producerSplits.reduce((s, x) => s + Number(x.percent || 0), 0)
@@ -242,7 +248,7 @@ export default function EntryDialog({ open, onOpenChange, producerId, entry, eve
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 {categories.map(cat => (
-                  <SelectItem key={cat} value={cat}>{CATEGORY_LABELS[cat]}</SelectItem>
+                  <SelectItem key={cat} value={cat}>{dynLabels[cat] ?? cat}</SelectItem>
                 ))}
               </SelectContent>
             </Select>

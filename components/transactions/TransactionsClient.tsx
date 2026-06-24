@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { Transaction, TransactionFormData, CATEGORIES, Category } from '@/lib/types'
+import { Transaction, TransactionFormData, CATEGORIES, TxCategory as Category } from '@/lib/types'
 import { formatCurrency, formatDate, getCurrentMonthYear, getMonthName } from '@/lib/utils/format'
 import { CATEGORY_COLORS } from '@/lib/utils/colors'
 import { exportToCSV } from '@/lib/utils/csv'
