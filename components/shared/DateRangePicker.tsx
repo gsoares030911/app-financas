@@ -50,6 +50,11 @@ export default function DateRangePicker({ value, onChange, placeholder = 'Seleci
   }
 
   function handleCalendarSelect(range: DateRange | undefined) {
+    // react-day-picker sets from===to on first click — tratar como "só início selecionado"
+    if (range?.from && range?.to && range.from.toDateString() === range.to.toDateString()) {
+      setTemp({ from: range.from, to: undefined })
+      return
+    }
     setTemp(range)
     if (range?.from && range?.to) {
       onChange(range)
