@@ -36,10 +36,10 @@ interface EventGroup {
   // Crédito extra
   bonus: number           // AE — bonificação
   // BE financeiro
-  beGrossProfit: number    // AI — Lucro Bruto (G × AH da planilha)
-  beOtherProfits: number   // AJ — Outros Lucros (+receita / −despesa)
-  beCardFee: number        // AL — Taxa cartão banco (despesa)
-  beTaxes: number          // AN — Impostos/NF (despesa)
+  beGrossProfit: number    // AI — Lucro (R$)
+  beOtherProfits: number   // AJ — Outros Lucros (R$, pode ser negativo)
+  beCardFee: number        // AM — $CARTÃO taxa banco (R$, não o % da col AL)
+  beTaxes: number          // AO — $IMPOSTO/NF (R$, não o % da col AN)
   // Contato
   pix: string
   phone: string
@@ -147,10 +147,10 @@ async function parseXLSX(file: File): Promise<{ groups: EventGroup[], cancelled:
     const bonus = num(row[30])  // AE
 
     // BE financeiro — lidos diretamente da planilha
-    const beGross = num(row[34])   // AI = Lucro Bruto (G × AH)
-    const beOther = num(row[35])   // AJ = Outros Lucros (pode ser negativo)
-    const beCard  = num(row[37])   // AL = Taxa cartão banco
-    const beTax   = num(row[39])   // AN = Impostos/NF
+    const beGross = num(row[34])   // AI = Lucro (R$)
+    const beOther = num(row[35])   // AJ = Outros Lucros (R$, pode ser negativo)
+    const beCard  = num(row[38])   // AM = $CARTÃO (valor R$, não o % da coluna AL)
+    const beTax   = num(row[40])   // AO = $IMPOSTO (valor R$, não o % da coluna AN)
 
     const pix   = String(row[44] ?? '')
     const phone = String(row[45] ?? '')
