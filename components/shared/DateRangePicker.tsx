@@ -40,6 +40,15 @@ export default function DateRangePicker({ value, onChange, placeholder = 'Seleci
   const [open, setOpen] = useState(false)
   const [temp, setTemp] = useState<DateRange | undefined>(value)
 
+  const midSelection = !!(temp?.from && !temp?.to)
+
+  function handleOpenChange(o: boolean) {
+    // Impede fechar enquanto só a data inicial foi selecionada
+    if (!o && midSelection) return
+    setOpen(o)
+    if (o) setTemp(value)
+  }
+
   function handleCalendarSelect(range: DateRange | undefined) {
     setTemp(range)
     if (range?.from && range?.to) {
@@ -72,7 +81,7 @@ export default function DateRangePicker({ value, onChange, placeholder = 'Seleci
   const defaultMonth = value?.from ? subMonths(value.from, 1) : subMonths(today(), 1)
 
   return (
-    <Popover open={open} onOpenChange={(o) => { setOpen(o); if (o) setTemp(value) }}>
+    <Popover open={open} onOpenChange={handleOpenChange}>
       <PopoverTrigger
         className={cn(
           'inline-flex items-center gap-1.5 h-8 px-3 text-sm rounded-md border font-normal transition-colors select-none',
@@ -85,10 +94,7 @@ export default function DateRangePicker({ value, onChange, placeholder = 'Seleci
         <CalendarDays className="h-3.5 w-3.5 shrink-0" />
         <span>{label}</span>
         {hasValue ? (
-          <span
-            onClick={handleClear}
-            className="ml-0.5 p-0.5 rounded-full hover:bg-blue-200 cursor-pointer"
-          >
+          <span onClick={handleClear} className="ml-0.5 p-0.5 rounded-full hover:bg-blue-200 cursor-pointer">
             <X className="h-3 w-3" />
           </span>
         ) : (
@@ -100,7 +106,9 @@ export default function DateRangePicker({ value, onChange, placeholder = 'Seleci
         align={align}
         sideOffset={8}
         className="w-auto p-0 flex shadow-lg"
-        onInteractOutside={e => { if (temp?.from && !temp?.to) e.preventDefault() }}
+        onInteractOutside={e => { if (midSelection) e.preventDefault() }}
+        onFocusOutside={e => { if (midSelection) e.preventDefault() }}
+        onEscapeKeyDown={e => { if (midSelection) e.preventDefault() }}
       >
         {/* Presets */}
         <div className="flex flex-col gap-0.5 p-2 border-r min-w-[140px]">
@@ -126,20 +134,28 @@ export default function DateRangePicker({ value, onChange, placeholder = 'Seleci
           </div>
         </div>
 
-        {/* Dual-month calendar */}
+        {/* Calendar + status */}
         <div className="p-3">
-          {/* Status bar */}
-          <div className="flex items-center gap-3 mb-3 px-1">
-            <div className={`flex-1 text-center rounded-md px-3 py-1.5 text-xs font-medium border transition-colors ${
-              temp?.from ? 'bg-blue-50 border-blue-200 text-blue-700' : 'bg-gray-50 border-gray-200 text-gray-400'
-            }`}>
+          {/* Barra de status */}
+          <div className="flex items-center gap-2 mb-3">
+            <div className={cn(
+              'flex-1 text-center rounded-md px-2 py-1.5 text-xs font-medium border',
+              temp?.from
+                ? 'bg-blue-50 border-blue-200 text-blue-700'
+                : 'bg-gray-50 border-gray-200 text-gray-400'
+            )}>
               {temp?.from ? fmt(temp.from) : 'Data inicial'}
             </div>
-            <span className="text-gray-300 text-sm">→</span>
-            <div className={`flex-1 text-center rounded-md px-3 py-1.5 text-xs font-medium border transition-colors ${
-              temp?.to ? 'bg-blue-50 border-blue-200 text-blue-700' : temp?.from ? 'bg-orange-50 border-orange-300 text-orange-600 animate-pulse' : 'bg-gray-50 border-gray-200 text-gray-400'
-            }`}>
-              {temp?.to ? fmt(temp.to) : 'Data final'}
+            <span className="text-gray-300">→</span>
+            <div className={cn(
+              'flex-1 text-center rounded-md px-2 py-1.5 text-xs font-medium border',
+              temp?.to
+                ? 'bg-blue-50 border-blue-200 text-blue-700'
+                : midSelection
+                  ? 'bg-orange-50 border-orange-400 text-orange-600'
+                  : 'bg-gray-50 border-gray-200 text-gray-400'
+            )}>
+              {temp?.to ? fmt(temp.to) : midSelection ? '← clique aqui no calendário' : 'Data final'}
             </div>
           </div>
 
@@ -151,12 +167,6 @@ export default function DateRangePicker({ value, onChange, placeholder = 'Seleci
             locale={ptBR}
             defaultMonth={defaultMonth}
           />
-
-          {temp?.from && !temp?.to && (
-            <p className="text-xs text-center text-orange-500 font-medium mt-2">
-              ← Agora clique na data final no calendário
-            </p>
-          )}
         </div>
       </PopoverContent>
     </Popover>
