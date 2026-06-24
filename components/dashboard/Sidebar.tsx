@@ -12,10 +12,9 @@ import type { UserRole } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
 const ADMIN_NAV = [
-  { href: '/dashboard',              label: 'Dashboard',         icon: LayoutDashboard },
+  { href: '/dashboard/rankings',     label: 'Dashboard',         icon: Trophy },
   { href: '/dashboard/producers',    label: 'Produtores',        icon: Users },
   { href: '/dashboard/bilheteria',   label: 'Bilheteria Express',icon: Ticket },
-  { href: '/dashboard/rankings',     label: 'Dashboard',         icon: Trophy },
 ]
 
 const PRODUCER_NAV = [
