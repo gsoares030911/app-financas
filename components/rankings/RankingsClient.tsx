@@ -1,23 +1,40 @@
 'use client'
 
 import { useMemo } from 'react'
+import Link from 'next/link'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { formatCurrency } from '@/lib/utils/format'
-import { Trophy, TrendingDown, Users, TrendingUp } from 'lucide-react'
+import { Trophy, TrendingDown, Users, TrendingUp, AlertCircle } from 'lucide-react'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
 } from 'recharts'
 import type { Producer, AccountEntry, ProducerEvent } from '@/lib/types'
 
+interface CancelledEvent {
+  id: string
+  name: string
+  event_date: string
+  producer_id: string
+}
+
+interface CancelledEntry {
+  event_id: string
+  producer_id: string
+  entry_type: string
+  amount: number
+}
+
 interface Props {
   producers: Producer[]
   entries: Pick<AccountEntry, 'producer_id' | 'entry_type' | 'amount'>[]
   events: Pick<ProducerEvent, 'producer_id' | 'gross_revenue' | 'net_amount' | 'status'>[]
+  cancelledEvents: CancelledEvent[]
+  cancelledEntries: CancelledEntry[]
 }
 
 const MEDAL_COLORS = ['#f59e0b', '#9ca3af', '#d97706']
 
-export default function RankingsClient({ producers, entries, events }: Props) {
+export default function RankingsClient({ producers, entries, events, cancelledEvents, cancelledEntries }: Props) {
   const stats = useMemo(() => {
     return producers.map(p => {
       const pe = entries.filter(e => e.producer_id === p.id)
@@ -44,6 +61,20 @@ export default function RankingsClient({ producers, entries, events }: Props) {
   const globalToPay = stats.filter(s => s.balance > 0).reduce((s, p) => s + p.balance, 0)
   const globalOwed = Math.abs(stats.filter(s => s.balance < 0).reduce((s, p) => s + p.balance, 0))
 
+  const pendingCollections = useMemo(() => {
+    const producerMap = new Map(producers.map(p => [p.id, p]))
+    return cancelledEvents
+      .map(ev => {
+        const evEntries = cancelledEntries.filter(e => e.event_id === ev.id)
+        const debits  = evEntries.filter(e => e.entry_type === 'debito').reduce((s, e) => s + Number(e.amount), 0)
+        const credits = evEntries.filter(e => e.entry_type === 'credito').reduce((s, e) => s + Number(e.amount), 0)
+        const pending = Math.round((debits - credits) * 100) / 100
+        return { ev, producer: producerMap.get(ev.producer_id), pending }
+      })
+      .filter(x => x.pending > 0)
+      .sort((a, b) => b.pending - a.pending)
+  }, [cancelledEvents, cancelledEntries, producers])
+
   const sellersData = topSellers.map(s => ({
     name: s.producer.full_name.split(' ')[0],
     fullName: s.producer.full_name,
@@ -59,9 +90,71 @@ export default function RankingsClient({ producers, entries, events }: Props) {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Rankings</h1>
-        <p className="text-gray-500 text-sm mt-1">Performance dos produtores culturais</p>
+        <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
+        <p className="text-gray-500 text-sm mt-1">Visão geral — produtores e cobranças pendentes</p>
       </div>
+
+      {/* Cobranças Pendentes de Cancelamentos */}
+      {pendingCollections.length > 0 && (
+        <Card className="border-orange-200 bg-orange-50/40">
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-base text-orange-700">
+              <AlertCircle className="h-5 w-5" />
+              Cobranças Pendentes de Cancelamentos ({pendingCollections.length})
+            </CardTitle>
+            <p className="text-xs text-orange-600">
+              Estes valores serão descontados automaticamente no próximo evento de cada produtor.
+            </p>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-orange-200">
+                    <th className="text-left py-2 px-3 text-xs font-semibold text-orange-700">Produtor</th>
+                    <th className="text-left py-2 px-3 text-xs font-semibold text-orange-700">Evento Cancelado</th>
+                    <th className="text-left py-2 px-3 text-xs font-semibold text-orange-700">Data</th>
+                    <th className="text-right py-2 px-3 text-xs font-semibold text-orange-700">A Cobrar</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-orange-100">
+                  {pendingCollections.map(({ ev, producer, pending }) => (
+                    <tr key={ev.id} className="hover:bg-orange-50 transition-colors">
+                      <td className="py-2.5 px-3">
+                        {producer ? (
+                          <Link
+                            href={`/dashboard/producers/${producer.id}`}
+                            className="font-medium text-gray-800 hover:text-orange-700 hover:underline"
+                          >
+                            {producer.full_name}
+                          </Link>
+                        ) : (
+                          <span className="text-gray-500">—</span>
+                        )}
+                      </td>
+                      <td className="py-2.5 px-3 text-gray-600 max-w-[220px] truncate">{ev.name}</td>
+                      <td className="py-2.5 px-3 text-gray-500 whitespace-nowrap">
+                        {new Date(ev.event_date + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' })}
+                      </td>
+                      <td className="py-2.5 px-3 text-right font-semibold text-orange-700 whitespace-nowrap">
+                        {formatCurrency(pending)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot className="border-t border-orange-200">
+                  <tr>
+                    <td colSpan={3} className="py-2 px-3 text-xs font-semibold text-orange-700">Total pendente</td>
+                    <td className="py-2 px-3 text-right font-bold text-orange-700">
+                      {formatCurrency(pendingCollections.reduce((s, x) => s + x.pending, 0))}
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Summary */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
