@@ -299,36 +299,6 @@ export default function ProducerStatementClient({ producer: initialProducer, ent
                 </div>
               </div>
 
-              {salesChartData.length > 1 && (
-                <div className="mt-5 pt-4 border-t border-gray-100">
-                  <p className="text-xs text-gray-400 mb-2 text-center">Evolução de vendas</p>
-                  <ResponsiveContainer width="100%" height={90}>
-                    <AreaChart data={salesChartData} margin={{ top: 2, right: 4, left: 0, bottom: 0 }}>
-                      <defs>
-                        <linearGradient id="salesGrad" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#22c55e" stopOpacity={0.25} />
-                          <stop offset="95%" stopColor="#22c55e" stopOpacity={0} />
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                      <XAxis dataKey="label" tick={{ fontSize: 9 }} interval="preserveStartEnd" />
-                      <YAxis hide />
-                      <Tooltip
-                        formatter={(v) => [formatCurrency(Number(v)), 'Vendas']}
-                        contentStyle={{ fontSize: 11 }}
-                      />
-                      <Area
-                        type="monotone"
-                        dataKey="total"
-                        stroke="#22c55e"
-                        strokeWidth={1.5}
-                        fill="url(#salesGrad)"
-                        dot={false}
-                      />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </div>
-              )}
             </div>
           </CardContent>
         </Card>
@@ -373,6 +343,30 @@ export default function ProducerStatementClient({ producer: initialProducer, ent
                 </p>
               )}
             </div>
+
+            {salesChartData.length > 1 && (
+              <div className="mt-4 pt-4 border-t border-gray-100">
+                <p className="text-xs text-gray-400 mb-2">Evolução de vendas {dateRange?.from ? '— período selecionado' : '— acumulado'}</p>
+                <ResponsiveContainer width="100%" height={100}>
+                  <AreaChart data={salesChartData} margin={{ top: 2, right: 4, left: 0, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="salesGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#22c55e" stopOpacity={0.25} />
+                        <stop offset="95%" stopColor="#22c55e" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                    <XAxis dataKey="label" tick={{ fontSize: 9 }} interval="preserveStartEnd" />
+                    <YAxis hide />
+                    <Tooltip
+                      formatter={(v) => [formatCurrency(Number(v)), 'Vendas']}
+                      contentStyle={{ fontSize: 11 }}
+                    />
+                    <Area type="monotone" dataKey="total" stroke="#22c55e" strokeWidth={1.5} fill="url(#salesGrad)" dot={false} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
