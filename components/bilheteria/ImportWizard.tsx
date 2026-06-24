@@ -61,6 +61,9 @@ interface ImportResult {
   skipped: number
   duplicates: number
   errors: string[]
+  cancelledDebited: number
+  collectionsApplied: number
+  collectionsAmount: number
 }
 
 type Step = 'upload' | 'mapping' | 'preview' | 'importing' | 'done'
@@ -106,7 +109,29 @@ function num(v: unknown): number {
   return isFinite(n) ? n : 0
 }
 
-async function parseXLSX(file: File): Promise<{ groups: EventGroup[], cancelled: number }> {
+interface CancelledBE { ai: number; aj: number; am: number; ao: number }
+
+interface CancelledGroup {
+  key: string
+  dateStr: string
+  show: string
+  producerName: string
+  advertising: number
+  loan: number
+  loanInterest: number
+  voucher: number
+  otherExpenses: number
+  pix: string
+  phone: string
+  email: string
+}
+
+async function parseXLSX(file: File): Promise<{
+  groups: EventGroup[]
+  cancelled: number
+  cancelledBE: CancelledBE
+  cancelledWithValues: CancelledGroup[]
+}> {
   const XLSX = await import('xlsx')
   const buffer = await file.arrayBuffer()
   const wb = XLSX.read(buffer)
@@ -114,7 +139,9 @@ async function parseXLSX(file: File): Promise<{ groups: EventGroup[], cancelled:
   const rows: unknown[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: 0 }) as unknown[][]
 
   const map = new Map<string, EventGroup>()
+  const cancelledMap = new Map<string, CancelledGroup>()
   let cancelled = 0
+  const cancelledBE: CancelledBE = { ai: 0, aj: 0, am: 0, ao: 0 }
 
   for (const row of rows.slice(1)) {
     const show = String(row[2] ?? '').trim()
@@ -122,7 +149,40 @@ async function parseXLSX(file: File): Promise<{ groups: EventGroup[], cancelled:
     const dateSerial = Number(row[0])
     if (!show || !producer || !dateSerial) continue
 
-    if (String(row[42]) === 'S') { cancelled++; continue }
+    if (String(row[42]) === 'S') {
+      cancelled++
+      cancelledBE.ai = r2(cancelledBE.ai + num(row[34]))
+      cancelledBE.aj = r2(cancelledBE.aj + num(row[35]))
+      cancelledBE.am = r2(cancelledBE.am + num(row[38]))
+      cancelledBE.ao = r2(cancelledBE.ao + num(row[40]))
+
+      const adv  = num(row[26])  // AA — anúncio
+      const loan = num(row[27])  // AB — empréstimo
+      const lInt = num(row[28])  // AC — juros
+      const vch  = num(row[10])  // K  — voucher
+      const oth  = num(row[29])  // AD — outros
+
+      if (adv > 0 || loan > 0 || lInt > 0 || vch > 0 || oth > 0) {
+        const cKey = `${dateSerial}|${show}|${producer}`
+        const ex = cancelledMap.get(cKey)
+        if (ex) {
+          ex.advertising   = r2(ex.advertising   + adv)
+          ex.loan          = r2(ex.loan          + loan)
+          ex.loanInterest  = r2(ex.loanInterest  + lInt)
+          ex.voucher       = r2(ex.voucher       + vch)
+          ex.otherExpenses = r2(ex.otherExpenses + oth)
+        } else {
+          cancelledMap.set(cKey, {
+            key: cKey,
+            dateStr: excelToISO(dateSerial),
+            show, producerName: producer,
+            advertising: adv, loan, loanInterest: lInt, voucher: vch, otherExpenses: oth,
+            pix: String(row[44] ?? ''), phone: String(row[45] ?? ''), email: String(row[46] ?? ''),
+          })
+        }
+      }
+      continue
+    }
 
     const key = `${dateSerial}|${show}|${producer}`
 
@@ -197,7 +257,10 @@ async function parseXLSX(file: File): Promise<{ groups: EventGroup[], cancelled:
   const groups = Array.from(map.values())
     .sort((a, b) => a.dateSerial - b.dateSerial || a.show.localeCompare(b.show))
 
-  return { groups, cancelled }
+  // Só considera cancelado se NÃO existe nenhuma linha não-cancelada com o mesmo key
+  const cancelledWithValues = Array.from(cancelledMap.values()).filter(cg => !map.has(cg.key))
+
+  return { groups, cancelled, cancelledBE, cancelledWithValues }
 }
 
 function evtTotalDebits(e: EventGroup) {
@@ -224,6 +287,8 @@ export default function ImportWizard({ initialProducers }: Props) {
   const [fileName, setFileName] = useState('')
   const [events, setEvents] = useState<EventGroup[]>([])
   const [cancelledCount, setCancelledCount] = useState(0)
+  const [cancelledBESums, setCancelledBESums] = useState<CancelledBE>({ ai: 0, aj: 0, am: 0, ao: 0 })
+  const [cancelledWithValues, setCancelledWithValues] = useState<CancelledGroup[]>([])
   const [producerMaps, setProducerMaps] = useState<ProducerMap[]>([])
   const [result, setResult] = useState<ImportResult | null>(null)
   const [progress, setProgress] = useState(0)
@@ -238,10 +303,12 @@ export default function ImportWizard({ initialProducers }: Props) {
     }
     setFileName(file.name)
     try {
-      const { groups, cancelled } = await parseXLSX(file)
+      const { groups, cancelled, cancelledBE, cancelledWithValues } = await parseXLSX(file)
       if (groups.length === 0) { toast.error('Nenhum evento válido encontrado na planilha'); return }
       setEvents(groups)
       setCancelledCount(cancelled)
+      setCancelledBESums(cancelledBE)
+      setCancelledWithValues(cancelledWithValues)
 
       const uniqueNames = [...new Set(groups.map(g => g.producerName))]
       const maps: ProducerMap[] = uniqueNames.map(name => {
@@ -279,9 +346,12 @@ export default function ImportWizard({ initialProducers }: Props) {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { toast.error('Não autenticado'); setStep('preview'); return }
 
-    const result: ImportResult = { created: 0, skipped: 0, duplicates: 0, errors: [] }
+    const result: ImportResult = {
+      created: 0, skipped: 0, duplicates: 0, errors: [],
+      cancelledDebited: 0, collectionsApplied: 0, collectionsAmount: 0,
+    }
 
-    // Resolve IDs de produtores (cria novos se necessário)
+    // ── 1. Resolver IDs de produtores ───────────────────────────────────
     const producerIdMap = new Map<string, string>()
     for (const pm of producerMaps) {
       if (pm.action === 'existing' && pm.existingId) {
@@ -299,8 +369,9 @@ export default function ImportWizard({ initialProducers }: Props) {
       }
     }
 
-    // Carrega eventos existentes para detecção de duplicatas
     const allProducerIds = [...producerIdMap.values()]
+
+    // ── 2. Carregar eventos existentes (todos os status) ────────────────
     const existingKeys = new Map<string, string>()
     if (allProducerIds.length > 0) {
       const { data: existing } = await supabase
@@ -312,76 +383,141 @@ export default function ImportWizard({ initialProducers }: Props) {
       }
     }
 
+    // ── 3. Calcular pendências de cancelamento ANTES de criar novos ────
+    // (só considera débitos de imports anteriores, não os desta rodada)
+    const pendingByProducer = new Map<string, number>()
+    if (allProducerIds.length > 0) {
+      const { data: cancelledEvs } = await supabase
+        .from('events')
+        .select('id, producer_id')
+        .in('producer_id', allProducerIds)
+        .eq('status', 'cancelado')
+
+      const cancelledEvIds = cancelledEvs?.map(e => e.id) ?? []
+      if (cancelledEvIds.length > 0) {
+        const { data: cEntries } = await supabase
+          .from('account_entries')
+          .select('producer_id, entry_type, amount')
+          .in('event_id', cancelledEvIds)
+
+        for (const e of cEntries ?? []) {
+          const curr = pendingByProducer.get(e.producer_id) ?? 0
+          pendingByProducer.set(
+            e.producer_id,
+            r2(curr + (e.entry_type === 'debito' ? Number(e.amount) : -Number(e.amount)))
+          )
+        }
+        for (const [pid, amt] of pendingByProducer) {
+          if (amt <= 0) pendingByProducer.delete(pid)
+        }
+      }
+    }
+
+    // ── 4. Processar eventos CANCELADOS com valores ─────────────────────
+    for (const cg of cancelledWithValues) {
+      const producerId = producerIdMap.get(cg.producerName)
+      if (!producerId) continue
+
+      const dupKey = `${producerId}|${cg.show}|${cg.dateStr}`
+      let eventId = existingKeys.get(dupKey)
+
+      if (!eventId) {
+        const { data: newEv, error } = await supabase.from('events').insert({
+          producer_id: producerId,
+          name: cg.show,
+          event_date: cg.dateStr,
+          gross_revenue: 0,
+          platform_fee: 0,
+          net_amount: 0,
+          status: 'cancelado',
+        }).select().single()
+        if (error) { result.errors.push(`[CANCELADO] "${cg.show}": ${error.message}`); continue }
+        eventId = newEv.id
+        existingKeys.set(dupKey, eventId)
+      }
+
+      // Lança débitos do cancelamento na conta corrente do produtor
+      const debCancelled = [
+        { category: 'anuncio',          description: `Anúncio — ${cg.show} [cancelado]`,            amount: cg.advertising },
+        { category: 'emprestimo',       description: `Empréstimo — ${cg.show} [cancelado]`,          amount: cg.loan },
+        { category: 'juros_emprestimo', description: `Juros de Empréstimo — ${cg.show} [cancelado]`, amount: cg.loanInterest },
+        { category: 'voucher',          description: `Voucher — ${cg.show} [cancelado]`,             amount: cg.voucher },
+        { category: 'outros',           description: `Outros — ${cg.show} [cancelado]`,              amount: cg.otherExpenses },
+      ]
+
+      // Verifica se já existem débitos para este evento cancelado (evita duplicar)
+      const { data: existingDebits } = await supabase
+        .from('account_entries')
+        .select('id')
+        .eq('event_id', eventId)
+        .eq('entry_type', 'debito')
+        .limit(1)
+
+      if (!existingDebits?.length) {
+        for (const d of debCancelled) {
+          if (d.amount <= 0) continue
+          await supabase.from('account_entries').insert({
+            producer_id: producerId, event_id: eventId,
+            entry_type: 'debito', category: d.category,
+            description: d.description, amount: d.amount, date: cg.dateStr,
+          })
+          result.cancelledDebited++
+        }
+      }
+    }
+
+    // ── 5. Processar eventos normais ────────────────────────────────────
     const selected = events.filter(e => e.selected)
     let done = 0
 
     for (const evt of selected) {
       const producerId = producerIdMap.get(evt.producerName)
-      if (!producerId) {
-        result.skipped++
-        done++
-        setProgress(Math.round((done / selected.length) * 100))
-        continue
-      }
+      if (!producerId) { result.skipped++; done++; setProgress(Math.round((done / selected.length) * 100)); continue }
 
       const dupKey = `${producerId}|${evt.show}|${evt.dateStr}`
       const existingEventId = existingKeys.get(dupKey)
 
       if (existingEventId && duplicateMode === 'skip') {
-        result.duplicates++
-        done++
-        setProgress(Math.round((done / selected.length) * 100))
-        continue
+        result.duplicates++; done++; setProgress(Math.round((done / selected.length) * 100)); continue
       }
 
       try {
-        const gross    = Math.max(0, evt.totalSales)
-        const debits   = evtTotalDebits(evt)
-        const net      = Math.max(0, r2(gross - debits + evt.bonus))
-        const platFee  = r2(evt.feeService + evt.feeAdmin + evt.feePrinting)
+        const gross   = Math.max(0, evt.totalSales)
+        const debits  = evtTotalDebits(evt)
+        const net     = Math.max(0, r2(gross - debits + evt.bonus))
+        const platFee = r2(evt.feeService + evt.feeAdmin + evt.feePrinting)
 
         let eventId: string
 
         if (existingEventId) {
           const { error: updErr } = await supabase.from('events').update({
-            gross_revenue: gross,
-            platform_fee: platFee,
-            net_amount: net,
+            gross_revenue: gross, platform_fee: platFee, net_amount: net,
+            status: 'pending',
           }).eq('id', existingEventId)
           if (updErr) throw updErr
-
           const { error: delAcc } = await supabase.from('account_entries').delete().eq('event_id', existingEventId)
           if (delAcc) throw delAcc
           const { error: delPlat } = await supabase.from('platform_entries').delete().eq('event_id', existingEventId)
           if (delPlat) throw delPlat
-
           eventId = existingEventId
           result.duplicates++
         } else {
           const { data: newEvent, error: evtErr } = await supabase.from('events').insert({
-            producer_id: producerId,
-            name: evt.show,
-            event_date: evt.dateStr,
-            gross_revenue: gross,
-            platform_fee: platFee,
-            net_amount: net,
-            status: 'pending',
-            notes: evt.session ? `Sessão: ${evt.session}` : null,
+            producer_id: producerId, name: evt.show, event_date: evt.dateStr,
+            gross_revenue: gross, platform_fee: platFee, net_amount: net,
+            status: 'pending', notes: evt.session ? `Sessão: ${evt.session}` : null,
           }).select().single()
           if (evtErr) throw evtErr
           eventId = newEvent.id
           result.created++
         }
 
-        // ── Entradas na conta corrente do produtor ──────────────────────
-
         // Crédito: venda bruta
         if (gross > 0) {
           const { error: e1 } = await supabase.from('account_entries').insert({
             producer_id: producerId, event_id: eventId,
             entry_type: 'credito', category: 'venda_evento',
-            description: `Venda de ingresso — ${evt.show}`,
-            amount: gross, date: evt.dateStr,
+            description: `Venda de ingresso — ${evt.show}`, amount: gross, date: evt.dateStr,
           })
           if (e1) throw e1
         }
@@ -391,86 +527,93 @@ export default function ImportWizard({ initialProducers }: Props) {
           const { error: e2 } = await supabase.from('account_entries').insert({
             producer_id: producerId, event_id: eventId,
             entry_type: 'credito', category: 'bonificacao',
-            description: `Bonificação — ${evt.show}`,
-            amount: evt.bonus, date: evt.dateStr,
+            description: `Bonificação — ${evt.show}`, amount: evt.bonus, date: evt.dateStr,
           })
           if (e2) throw e2
         }
 
         // Débitos por tipo de taxa
-        const debEntries: Array<{ category: string; description: string; amount: number }> = [
-          { category: 'taxa_cartao_pix',    description: `Taxa Cartão/PIX — ${evt.show}`,       amount: evt.feeCardPix },
-          { category: 'taxa_dinheiro',      description: `Taxa Vendas Dinheiro — ${evt.show}`,   amount: evt.feeCash },
-          { category: 'taxa_servico',       description: `Taxa de Serviço — ${evt.show}`,        amount: evt.feeService },
-          { category: 'taxa_administrativa',description: `Taxa Administrativa — ${evt.show}`,    amount: evt.feeAdmin },
-          { category: 'taxa_impressao',     description: `Taxa Impressão/Envio — ${evt.show}`,   amount: evt.feePrinting },
-          { category: 'voucher',            description: `Voucher/Outros Sistemas — ${evt.show}`,amount: evt.voucher },
-          { category: 'anuncio',            description: `Anúncio — ${evt.show}`,                amount: evt.advertising },
-          { category: 'emprestimo',         description: `Empréstimo — ${evt.show}`,             amount: evt.loan },
-          { category: 'juros_emprestimo',   description: `Juros de Empréstimo — ${evt.show}`,    amount: evt.loanInterest },
-          { category: 'outros',             description: `Outros — ${evt.show}`,                 amount: evt.otherExpenses },
+        const debEntries = [
+          { category: 'taxa_cartao_pix',     description: `Taxa Cartão/PIX — ${evt.show}`,        amount: evt.feeCardPix },
+          { category: 'taxa_dinheiro',       description: `Taxa Vendas Dinheiro — ${evt.show}`,    amount: evt.feeCash },
+          { category: 'taxa_servico',        description: `Taxa de Serviço — ${evt.show}`,         amount: evt.feeService },
+          { category: 'taxa_administrativa', description: `Taxa Administrativa — ${evt.show}`,     amount: evt.feeAdmin },
+          { category: 'taxa_impressao',      description: `Taxa Impressão/Envio — ${evt.show}`,    amount: evt.feePrinting },
+          { category: 'voucher',             description: `Voucher/Outros Sistemas — ${evt.show}`, amount: evt.voucher },
+          { category: 'anuncio',             description: `Anúncio — ${evt.show}`,                 amount: evt.advertising },
+          { category: 'emprestimo',          description: `Empréstimo — ${evt.show}`,              amount: evt.loan },
+          { category: 'juros_emprestimo',    description: `Juros de Empréstimo — ${evt.show}`,     amount: evt.loanInterest },
+          { category: 'outros',              description: `Outros — ${evt.show}`,                  amount: evt.otherExpenses },
         ]
         for (const entry of debEntries) {
           if (entry.amount > 0) {
             await supabase.from('account_entries').insert({
               producer_id: producerId, event_id: eventId,
               entry_type: 'debito', category: entry.category,
-              description: entry.description,
-              amount: entry.amount, date: evt.dateStr,
+              description: entry.description, amount: entry.amount, date: evt.dateStr,
             })
           }
         }
 
-        // ── Financeiro Bilheteria Express ───────────────────────────────
+        // ── Cobrança automática de cancelamentos pendentes ──────────────
+        const pendingAmt = pendingByProducer.get(producerId) ?? 0
+        if (pendingAmt > 0) {
+          // Crédito de compensação na conta do produtor (quita a dívida)
+          await supabase.from('account_entries').insert({
+            producer_id: producerId, event_id: eventId,
+            entry_type: 'credito', category: 'outros',
+            description: `Cobrança de cancelamento — descontado em ${evt.show}`,
+            amount: pendingAmt, date: evt.dateStr,
+          })
+          // Receita na Bilheteria Express (a plataforma recuperou o custo)
+          await supabase.from('platform_entries').insert({
+            user_id: user.id, event_id: eventId, producer_id: producerId,
+            entry_type: 'receita', category: 'outros_receita',
+            description: `Recuperação de cancelamento — ${evt.show}`,
+            amount: pendingAmt, date: evt.dateStr,
+          })
+          result.collectionsApplied++
+          result.collectionsAmount = r2(result.collectionsAmount + pendingAmt)
+          pendingByProducer.delete(producerId)
+        }
 
-        // Lucro Bruto BE (AI = G × AH da planilha)
+        // ── Bilheteria Express ──────────────────────────────────────────
         if (evt.beGrossProfit > 0) {
           const { error: pe1 } = await supabase.from('platform_entries').insert({
             user_id: user.id, event_id: eventId, producer_id: producerId,
             entry_type: 'receita', category: 'taxa_evento',
-            description: `Lucro bruto — ${evt.show}`,
-            amount: evt.beGrossProfit, date: evt.dateStr,
+            description: `Lucro bruto — ${evt.show}`, amount: evt.beGrossProfit, date: evt.dateStr,
           })
           if (pe1) throw pe1
         }
-
-        // Outros Lucros/Custos (AJ — positivo=receita, negativo=despesa)
         if (evt.beOtherProfits > 0) {
           const { error: pe2 } = await supabase.from('platform_entries').insert({
             user_id: user.id, event_id: eventId, producer_id: producerId,
             entry_type: 'receita', category: 'outros_receita',
-            description: `Outros lucros — ${evt.show}`,
-            amount: evt.beOtherProfits, date: evt.dateStr,
+            description: `Outros lucros — ${evt.show}`, amount: evt.beOtherProfits, date: evt.dateStr,
           })
           if (pe2) throw pe2
         } else if (evt.beOtherProfits < 0) {
           const { error: pe2 } = await supabase.from('platform_entries').insert({
             user_id: user.id, event_id: eventId, producer_id: producerId,
             entry_type: 'despesa', category: 'outros_despesa',
-            description: `Outros custos — ${evt.show}`,
-            amount: Math.abs(evt.beOtherProfits), date: evt.dateStr,
+            description: `Outros custos — ${evt.show}`, amount: Math.abs(evt.beOtherProfits), date: evt.dateStr,
           })
           if (pe2) throw pe2
         }
-
-        // Taxa cartão banco (AL)
         if (evt.beCardFee > 0) {
           const { error: pe3 } = await supabase.from('platform_entries').insert({
             user_id: user.id, event_id: eventId, producer_id: producerId,
             entry_type: 'despesa', category: 'infraestrutura',
-            description: `Taxa cartão banco — ${evt.show}`,
-            amount: evt.beCardFee, date: evt.dateStr,
+            description: `Taxa cartão banco — ${evt.show}`, amount: evt.beCardFee, date: evt.dateStr,
           })
           if (pe3) throw pe3
         }
-
-        // Impostos/NF (AN)
         if (evt.beTaxes > 0) {
           const { error: pe4 } = await supabase.from('platform_entries').insert({
             user_id: user.id, event_id: eventId, producer_id: producerId,
             entry_type: 'despesa', category: 'impostos',
-            description: `Impostos/NF — ${evt.show}`,
-            amount: evt.beTaxes, date: evt.dateStr,
+            description: `Impostos/NF — ${evt.show}`, amount: evt.beTaxes, date: evt.dateStr,
           })
           if (pe4) throw pe4
         }
@@ -609,6 +752,14 @@ export default function ImportWizard({ initialProducers }: Props) {
     const totBonus   = selEvts.reduce((s, e) => s + e.bonus, 0)
     const totLiquid  = selEvts.reduce((s, e) => s + evtLiquid(e), 0)
 
+    // BE totals para diagnóstico
+    const beAI   = r2(selEvts.reduce((s, e) => s + e.beGrossProfit, 0))
+    const beAJ   = r2(selEvts.reduce((s, e) => s + e.beOtherProfits, 0))
+    const beAM   = r2(selEvts.reduce((s, e) => s + e.beCardFee, 0))
+    const beAO   = r2(selEvts.reduce((s, e) => s + e.beTaxes, 0))
+    const beNet  = r2(beAI + beAJ - beAM - beAO)
+    const cancelNet = r2(cancelledBESums.ai + cancelledBESums.aj - cancelledBESums.am - cancelledBESums.ao)
+
     return (
       <div className="space-y-4">
         <div className="grid grid-cols-4 gap-3">
@@ -628,6 +779,41 @@ export default function ImportWizard({ initialProducers }: Props) {
             <p className="text-lg font-bold text-green-600">{fmt(totBonus)}</p>
             <p className="text-xs text-gray-500 mt-0.5">BV lido (AE)</p>
           </div>
+        </div>
+
+        {/* Resumo Bilheteria Express — diagnóstico */}
+        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+          <p className="text-xs font-semibold text-blue-700 uppercase tracking-wide mb-3">Resumo Bilheteria Express (lido da planilha)</p>
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 text-center">
+            <div>
+              <p className="text-sm font-bold text-gray-800">{fmt(beAI)}</p>
+              <p className="text-xs text-gray-500">AI — Lucro</p>
+            </div>
+            <div>
+              <p className="text-sm font-bold text-gray-800">{fmt(beAJ)}</p>
+              <p className="text-xs text-gray-500">AJ — Outros Lucros</p>
+            </div>
+            <div>
+              <p className="text-sm font-bold text-red-600">−{fmt(beAM)}</p>
+              <p className="text-xs text-gray-500">AM — Taxa Cartão</p>
+            </div>
+            <div>
+              <p className="text-sm font-bold text-red-600">−{fmt(beAO)}</p>
+              <p className="text-xs text-gray-500">AO — Impostos</p>
+            </div>
+            <div className="sm:border-l sm:border-blue-200 sm:pl-3">
+              <p className="text-sm font-bold text-blue-700">{fmt(beNet)}</p>
+              <p className="text-xs text-gray-500">AP — Líquido</p>
+            </div>
+          </div>
+          {cancelledCount > 0 && (
+            <p className="text-xs text-amber-700 mt-3 border-t border-blue-200 pt-2">
+              {cancelledWithValues.length > 0
+                ? `⚠️ ${cancelledWithValues.length} eventos cancelados com valores · débitos serão lançados na conta corrente dos produtores · cobranças pendentes serão descontadas automaticamente`
+                : `ℹ️ ${cancelledCount} eventos cancelados sem valores — ignorados`
+              }
+            </p>
+          )}
         </div>
 
         {/* Toggle duplicatas */}
@@ -778,6 +964,16 @@ export default function ImportWizard({ initialProducers }: Props) {
           {result.duplicates > 0 && ` · ${result.duplicates} ${duplicateMode === 'update' ? 'atualizado' : 'ignorado'}${result.duplicates !== 1 ? 's' : ''}`}
           {result.skipped > 0 && ` · ${result.skipped} com erro`}
         </p>
+        {(result.cancelledDebited > 0 || result.collectionsApplied > 0) && (
+          <div className="mt-3 space-y-1 text-xs text-gray-500">
+            {result.cancelledDebited > 0 && (
+              <p>🔴 {result.cancelledDebited} débito{result.cancelledDebited !== 1 ? 's' : ''} de cancelamento lançados na conta corrente</p>
+            )}
+            {result.collectionsApplied > 0 && (
+              <p>✅ {result.collectionsApplied} cobrança{result.collectionsApplied !== 1 ? 's' : ''} de cancelamento recuperada{result.collectionsApplied !== 1 ? 's' : ''} · {fmt(result.collectionsAmount)}</p>
+            )}
+          </div>
+        )}
       </div>
       {result.errors.length > 0 && (
         <div className="bg-amber-50 rounded-xl p-4 text-left">

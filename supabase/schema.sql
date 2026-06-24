@@ -111,7 +111,7 @@ create table if not exists public.events (
   gross_revenue numeric(12,2) not null default 0 check (gross_revenue >= 0),
   platform_fee numeric(12,2) not null default 0 check (platform_fee >= 0),
   net_amount numeric(12,2) not null check (net_amount >= 0),
-  status text not null default 'pending' check (status in ('pending', 'settled')),
+  status text not null default 'pending' check (status in ('pending', 'settled', 'cancelado')),
   notes text,
   created_at timestamptz default now()
 );

@@ -8,11 +8,22 @@ export default async function BilheteriaPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const { data: entries } = await supabase
-    .from('platform_entries')
-    .select('*')
-    .eq('user_id', user.id)
-    .order('date', { ascending: false })
+  const allEntries: PlatformEntry[] = []
+  const pageSize = 1000
+  let from = 0
+  while (true) {
+    const { data } = await supabase
+      .from('platform_entries')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('date', { ascending: false })
+      .range(from, from + pageSize - 1)
+    if (!data || data.length === 0) break
+    allEntries.push(...(data as PlatformEntry[]))
+    if (data.length < pageSize) break
+    from += pageSize
+  }
+  const entries = allEntries
 
   return (
     <div className="space-y-6">
