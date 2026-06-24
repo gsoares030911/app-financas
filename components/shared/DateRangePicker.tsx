@@ -100,6 +100,7 @@ export default function DateRangePicker({ value, onChange, placeholder = 'Seleci
         align={align}
         sideOffset={8}
         className="w-auto p-0 flex shadow-lg"
+        onInteractOutside={e => { if (temp?.from && !temp?.to) e.preventDefault() }}
       >
         {/* Presets */}
         <div className="flex flex-col gap-0.5 p-2 border-r min-w-[140px]">
@@ -127,6 +128,21 @@ export default function DateRangePicker({ value, onChange, placeholder = 'Seleci
 
         {/* Dual-month calendar */}
         <div className="p-3">
+          {/* Status bar */}
+          <div className="flex items-center gap-3 mb-3 px-1">
+            <div className={`flex-1 text-center rounded-md px-3 py-1.5 text-xs font-medium border transition-colors ${
+              temp?.from ? 'bg-blue-50 border-blue-200 text-blue-700' : 'bg-gray-50 border-gray-200 text-gray-400'
+            }`}>
+              {temp?.from ? fmt(temp.from) : 'Data inicial'}
+            </div>
+            <span className="text-gray-300 text-sm">→</span>
+            <div className={`flex-1 text-center rounded-md px-3 py-1.5 text-xs font-medium border transition-colors ${
+              temp?.to ? 'bg-blue-50 border-blue-200 text-blue-700' : temp?.from ? 'bg-orange-50 border-orange-300 text-orange-600 animate-pulse' : 'bg-gray-50 border-gray-200 text-gray-400'
+            }`}>
+              {temp?.to ? fmt(temp.to) : 'Data final'}
+            </div>
+          </div>
+
           <Calendar
             mode="range"
             selected={temp}
@@ -135,10 +151,10 @@ export default function DateRangePicker({ value, onChange, placeholder = 'Seleci
             locale={ptBR}
             defaultMonth={defaultMonth}
           />
-          {/* Footer hint */}
+
           {temp?.from && !temp?.to && (
-            <p className="text-xs text-center text-gray-400 mt-2">
-              Selecione a data final
+            <p className="text-xs text-center text-orange-500 font-medium mt-2">
+              ← Agora clique na data final no calendário
             </p>
           )}
         </div>
