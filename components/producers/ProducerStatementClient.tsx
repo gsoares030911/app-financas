@@ -54,9 +54,7 @@ export default function ProducerStatementClient({ producer: initialProducer, ent
   const [editRental, setEditRental] = useState<EquipmentRental | null>(null)
   const [filterType, setFilterType] = useState('all')
   const [filterCategory, setFilterCategory] = useState('all')
-  const [extratDateRange, setExtratDateRange] = useState<DateRange | undefined>(undefined)
-  const [eventDateRange, setEventDateRange] = useState<DateRange | undefined>(undefined)
-  const [cardDateRange, setCardDateRange] = useState<DateRange | undefined>(undefined)
+  const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined)
   const [selectedEventIds, setSelectedEventIds] = useState<Set<string>>(new Set())
 
   function SortIcon({ active, dir }: { active: boolean; dir: 'asc' | 'desc' }) {
@@ -85,13 +83,13 @@ export default function ProducerStatementClient({ producer: initialProducer, ent
   }
 
   const cardEntries = useMemo(() => {
-    if (!cardDateRange?.from) return entries
+    if (!dateRange?.from) return entries
     return entries.filter(e => {
       const d = new Date(e.date + 'T12:00:00')
-      if (cardDateRange.to) return d >= cardDateRange.from! && d <= cardDateRange.to
-      return d >= cardDateRange.from!
+      if (dateRange.to) return d >= dateRange.from! && d <= dateRange.to
+      return d >= dateRange.from!
     })
-  }, [entries, cardDateRange])
+  }, [entries, dateRange])
 
   const totalCredits = cardEntries.filter(e => e.entry_type === 'credito').reduce((s, e) => s + e.amount, 0)
   const totalDebits  = cardEntries.filter(e => e.entry_type === 'debito').reduce((s, e) => s + e.amount, 0)
@@ -115,16 +113,16 @@ export default function ProducerStatementClient({ producer: initialProducer, ent
       .filter(e => {
         if (filterType !== 'all' && e.entry_type !== filterType) return false
         if (filterCategory !== 'all' && e.category !== filterCategory) return false
-        if (extratDateRange?.from) {
+        if (dateRange?.from) {
           const d = new Date(e.date + 'T12:00:00')
-          if (extratDateRange.to) { if (!(d >= extratDateRange.from && d <= extratDateRange.to)) return false }
-          else { if (d < extratDateRange.from) return false }
+          if (dateRange.to) { if (!(d >= dateRange.from && d <= dateRange.to)) return false }
+          else { if (d < dateRange.from) return false }
         }
         return true
       })
       .slice()
       .reverse()
-  }, [allWithBalance, filterType, filterCategory, extratDateRange])
+  }, [allWithBalance, filterType, filterCategory, dateRange])
 
   const sortedDisplayEntries = useMemo(() => {
     return [...displayEntries].sort((a, b) => {
@@ -152,10 +150,10 @@ export default function ProducerStatementClient({ producer: initialProducer, ent
   const sortedEvents = useMemo(() => {
     return [...events]
       .filter(ev => {
-        if (!eventDateRange?.from) return true
+        if (!dateRange?.from) return true
         const d = new Date(ev.event_date + 'T12:00:00')
-        if (eventDateRange.to) return d >= eventDateRange.from && d <= eventDateRange.to
-        return d >= eventDateRange.from
+        if (dateRange.to) return d >= dateRange.from && d <= dateRange.to
+        return d >= dateRange.from
       })
       .sort((a, b) => {
         const { col, dir } = eventSort
@@ -168,7 +166,7 @@ export default function ProducerStatementClient({ producer: initialProducer, ent
         else if (col === 'status') cmp = a.status.localeCompare(b.status)
         return dir === 'asc' ? cmp : -cmp
       })
-  }, [events, eventSort, eventDateRange])
+  }, [events, eventSort, dateRange])
 
   const sortedRentals = useMemo(() => {
     return [...rentals].sort((a, b) => {
@@ -259,11 +257,11 @@ export default function ProducerStatementClient({ producer: initialProducer, ent
         <Card className={`${balance >= 0 ? 'border-green-200 bg-green-50/50' : 'border-red-200 bg-red-50/50'}`}>
           <CardContent className="pt-4">
             <div className="flex justify-center mb-3">
-              <DateRangePicker value={cardDateRange} onChange={setCardDateRange} />
+              <DateRangePicker value={dateRange} onChange={setDateRange} />
             </div>
             <div className="text-center">
               <p className="text-xs font-medium text-gray-400 mb-0.5">
-                {cardDateRange?.from ? 'Período selecionado' : 'Acumulado total'}
+                {dateRange?.from ? 'Período selecionado' : 'Acumulado total'}
               </p>
               <p className="text-sm font-medium text-gray-500 mb-1">
                 {balance >= 0 ? 'A Pagar ao Produtor' : 'Produtor Deve'}
@@ -345,7 +343,6 @@ export default function ProducerStatementClient({ producer: initialProducer, ent
         <TabsContent value="extrato" className="space-y-4 mt-4">
           <div className="flex flex-col sm:flex-row gap-2 sm:items-center justify-between flex-wrap">
             <div className="flex gap-2 flex-wrap">
-              <DateRangePicker value={extratDateRange} onChange={setExtratDateRange} />
               <Select value={filterType} onValueChange={v => v && setFilterType(v)}>
                 <SelectTrigger className="w-36">
                   <SelectValue placeholder="Tipo" />
@@ -454,7 +451,6 @@ export default function ProducerStatementClient({ producer: initialProducer, ent
         {/* ── Eventos ── */}
         <TabsContent value="eventos" className="space-y-4 mt-4">
           <div className="flex items-center justify-between gap-2 flex-wrap">
-            <DateRangePicker value={eventDateRange} onChange={setEventDateRange} />
             <Button onClick={() => { setEditEvent(null); setEventOpen(true) }}>
               <Plus className="h-4 w-4 mr-2" />
               Novo Evento
