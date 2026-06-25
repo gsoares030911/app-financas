@@ -433,7 +433,7 @@ export default function ImportWizard({ initialProducers }: Props) {
         }).select().single()
         if (error) { result.errors.push(`[CANCELADO] "${cg.show}": ${error.message}`); continue }
         eventId = newEv.id
-        existingKeys.set(dupKey, eventId)
+        if (eventId) existingKeys.set(dupKey, eventId)
       }
 
       // Lança débitos do cancelamento na conta corrente do produtor
