@@ -19,10 +19,9 @@ export default function ResetPasswordPage() {
   const [done, setDone] = useState(false)
 
   useEffect(() => {
-    const supabase = createClient()
     const hash = window.location.hash
 
-    // Se o hash contém um erro, mostra mensagem e para
+    // Erro explícito no hash (token expirado, etc)
     if (hash.includes('error=')) {
       const params = new URLSearchParams(hash.substring(1))
       const desc = params.get('error_description') ?? 'Link inválido ou expirado.'
@@ -30,32 +29,36 @@ export default function ResetPasswordPage() {
       return
     }
 
-    // Processa o hash #access_token= que vem do link de recuperação
-    if (hash.includes('access_token=')) {
-      const params = new URLSearchParams(hash.substring(1))
-      const accessToken = params.get('access_token')
-      const refreshToken = params.get('refresh_token')
+    const supabase = createClient()
 
-      if (accessToken && refreshToken) {
-        supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken })
-          .then(({ error }) => {
-            if (error) {
-              toast.error('Link inválido ou expirado. Solicite um novo.')
-            } else {
-              setReady(true)
-            }
-          })
+    // Tenta obter sessão ativa (createBrowserClient detecta o hash automaticamente)
+    const init = async () => {
+      // Aguarda o cliente processar o URL hash internamente
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session) {
+        setReady(true)
         return
+      }
+
+      // Se não processou ainda, escuta o evento de mudança
+      const timer = setTimeout(() => {
+        toast.error('Link expirado ou já utilizado. Solicite um novo.')
+      }, 8000)
+
+      const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+        if (session) {
+          clearTimeout(timer)
+          setReady(true)
+        }
+      })
+
+      return () => {
+        clearTimeout(timer)
+        subscription.unsubscribe()
       }
     }
 
-    // Aceita via onAuthStateChange (PKCE flow)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if ((event === 'SIGNED_IN' || event === 'PASSWORD_RECOVERY') && session) {
-        setReady(true)
-      }
-    })
-    return () => subscription.unsubscribe()
+    init()
   }, [])
 
   async function handleSubmit(e: React.FormEvent) {
