@@ -6,7 +6,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import {
   LogOut, Menu, X, Users, Trophy, Ticket,
-  Settings, FileText, ShieldCheck, ChevronDown, ChevronRight,
+  Settings, FileText, ShieldCheck, ChevronDown, ChevronRight, KeyRound,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
@@ -168,6 +168,17 @@ export default function Sidebar({ user, role }: Props) {
           {role === 'producer' && (
             <p className="text-xs text-blue-600 font-medium px-3 mb-2">Acesso Produtor</p>
           )}
+          <Link
+            href="/dashboard/conta"
+            onClick={() => setOpen(false)}
+            className={cn(
+              'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors w-full',
+              pathname === '/dashboard/conta' ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-100'
+            )}
+          >
+            <KeyRound className="h-4 w-4" />
+            Minha Conta
+          </Link>
           <button
             onClick={handleLogout}
             className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-red-600 hover:bg-red-50 transition-colors w-full"
