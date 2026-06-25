@@ -6,13 +6,16 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { formatCurrency } from '@/lib/utils/format'
 import { toast } from 'sonner'
-import { Eye, CheckCircle, Clock, Loader2, FileText, Trash2 } from 'lucide-react'
+import { Eye, CheckCircle, Loader2, FileText, Trash2, Download } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import ExportarCNABModal from './ExportarCNABModal'
 import type { PaymentOrder, Producer } from '@/lib/types'
+
+type ProducerBankInfo = Pick<Producer, 'id' | 'full_name' | 'bank_name' | 'bank_agency' | 'bank_account'>
 
 interface Props {
   orders: PaymentOrder[]
-  producers: Pick<Producer, 'id' | 'full_name'>[]
+  producers: ProducerBankInfo[]
 }
 
 type TabStatus = 'pending' | 'paid'
@@ -30,6 +33,7 @@ export default function OrdensListClient({ orders: initialOrders, producers }: P
   const [tab, setTab] = useState<TabStatus>('pending')
   const [confirming, setConfirming] = useState<string | null>(null)
   const [deleting, setDeleting] = useState<string | null>(null)
+  const [showCNAB, setShowCNAB] = useState(false)
 
   const producerMap = new Map(producers.map(p => [p.id, p.full_name]))
 
@@ -122,10 +126,21 @@ export default function OrdensListClient({ orders: initialOrders, producers }: P
     router.refresh()
   }
 
+  const pendingOrders = orders.filter(o => o.status === 'pending')
+
   return (
     <div className="space-y-4">
+      {showCNAB && (
+        <ExportarCNABModal
+          orders={pendingOrders}
+          producers={producers}
+          onClose={() => setShowCNAB(false)}
+        />
+      )}
+
       {/* Tabs */}
-      <div className="flex gap-1 border-b">
+      <div className="flex items-center justify-between border-b">
+        <div className="flex gap-1">
         {([
           { key: 'pending' as TabStatus, label: 'Pendentes', count: pendingCount },
           { key: 'paid'    as TabStatus, label: 'Pagas',     count: paidCount    },
@@ -149,6 +164,18 @@ export default function OrdensListClient({ orders: initialOrders, producers }: P
             </span>
           </button>
         ))}
+        </div>
+        {tab === 'pending' && pendingOrders.length > 0 && (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setShowCNAB(true)}
+            className="mb-px text-xs flex items-center gap-1.5 border-blue-200 text-blue-700 hover:bg-blue-50"
+          >
+            <Download className="h-3.5 w-3.5" />
+            Exportar CNAB 240 — Itaú
+          </Button>
+        )}
       </div>
 
       {/* Lista */}

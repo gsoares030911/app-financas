@@ -16,7 +16,7 @@ export default async function OrdensPagamentoPage() {
       .order('created_at', { ascending: false }),
     supabase
       .from('producers')
-      .select('id, full_name')
+      .select('id, full_name, bank_name, bank_agency, bank_account')
       .order('full_name'),
   ])
 
@@ -30,7 +30,7 @@ export default async function OrdensPagamentoPage() {
       </div>
       <OrdensListClient
         orders={(orders ?? []) as PaymentOrder[]}
-        producers={(producers ?? []) as Pick<Producer, 'id' | 'full_name'>[]}
+        producers={(producers ?? []) as Pick<Producer, 'id' | 'full_name' | 'bank_name' | 'bank_agency' | 'bank_account'>[]}
       />
     </div>
   )
