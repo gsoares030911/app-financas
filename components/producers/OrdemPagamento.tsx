@@ -70,19 +70,37 @@ export default function OrdemPagamento({ order, producer, events, entries }: Pro
       <div className="bg-white border rounded-xl p-8 max-w-3xl mx-auto print:border-none print:rounded-none print:p-0 print:max-w-none print:mx-0">
 
         {/* Cabeçalho */}
-        <div className="flex items-start justify-between border-b pb-6 mb-6">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900 tracking-tight">ORDEM DE PAGAMENTO</h1>
-            <p className="text-sm text-gray-500 mt-0.5">Conta Corrente de Produtor Cultural</p>
-          </div>
-          <div className="text-right text-sm">
-            <p className="font-mono font-bold text-blue-700 text-lg">{order.order_number}</p>
-            <p className="text-gray-500 mt-0.5">Emissão: {emittedAt}</p>
-            {order.period_from && (
-              <p className="text-gray-400 text-xs mt-0.5">
-                Período: {fmtDate(order.period_from)}{order.period_to ? ` a ${fmtDate(order.period_to)}` : ''}
+        <div className="mb-8">
+          <div className="flex items-center justify-between pb-5 border-b-2 border-gray-900">
+            {/* Logo */}
+            <img
+              src="/logo-bilheteria-express.png"
+              alt="Bilheteria Express"
+              className="h-16 w-auto object-contain"
+            />
+
+            {/* Título + número + data */}
+            <div className="text-right">
+              <p className="text-xs font-semibold tracking-[0.2em] uppercase text-gray-400 mb-1">
+                Conta Corrente de Produtor Cultural
               </p>
-            )}
+              <h1 className="text-2xl font-black tracking-tight text-gray-900 uppercase">
+                Ordem de Pagamento
+              </h1>
+              <div className="mt-2 flex items-center justify-end gap-3">
+                <span className="font-mono font-bold text-lg bg-gray-900 text-white px-3 py-1 rounded-lg tracking-wider">
+                  {order.order_number}
+                </span>
+                <span className="text-sm text-gray-500">
+                  Emissão: <span className="font-semibold text-gray-700">{emittedAt}</span>
+                </span>
+              </div>
+              {order.period_from && (
+                <p className="text-xs text-gray-400 mt-1">
+                  Período: {fmtDate(order.period_from)}{order.period_to ? ` a ${fmtDate(order.period_to)}` : ''}
+                </p>
+              )}
+            </div>
           </div>
         </div>
 
