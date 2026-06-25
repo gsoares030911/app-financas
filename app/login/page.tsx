@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { TrendingUp, Loader2 } from 'lucide-react'
+import { Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 
 export default function LoginPage() {
@@ -30,16 +30,15 @@ export default function LoginPage() {
       return
     }
 
-    router.push('/dashboard')
+    router.push('/dashboard/rankings')
     router.refresh()
   }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
       <div className="w-full max-w-md">
-        <div className="flex items-center justify-center gap-2 mb-8">
-          <TrendingUp className="h-7 w-7 text-blue-600" />
-          <span className="text-2xl font-bold text-gray-900">FinançasPRO</span>
+        <div className="flex items-center justify-center mb-8">
+          <img src="/logo-bilheteria-express.png" alt="Bilheteria Express" className="h-14 w-auto" />
         </div>
         <Card>
           <CardHeader>
