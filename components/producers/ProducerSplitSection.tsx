@@ -84,7 +84,7 @@ export default function ProducerSplitSection({
             <div className="flex items-center gap-2">
               <Select
                 value={split.producer_id || 'none'}
-                onValueChange={v => update(split.uid, 'producer_id', v === 'none' ? '' : v)}
+                onValueChange={v => update(split.uid, 'producer_id', v === 'none' ? '' : (v ?? ''))}
               >
                 <SelectTrigger className="flex-1 text-sm">
                   <SelectValue placeholder="Selecionar produtor..." />
