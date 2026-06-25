@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useEffect, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -10,8 +10,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Loader2, CheckCircle } from 'lucide-react'
 import { toast } from 'sonner'
 
-export default function ResetPasswordPage() {
+function ResetPasswordForm() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
   const [loading, setLoading] = useState(false)
@@ -19,47 +20,23 @@ export default function ResetPasswordPage() {
   const [done, setDone] = useState(false)
 
   useEffect(() => {
-    const hash = window.location.hash
+    const tokenHash = searchParams.get('token_hash')
+    const type = searchParams.get('type') as 'recovery' | null
 
-    // Erro explícito no hash (token expirado, etc)
-    if (hash.includes('error=')) {
-      const params = new URLSearchParams(hash.substring(1))
-      const desc = params.get('error_description') ?? 'Link inválido ou expirado.'
-      toast.error(desc.replace(/\+/g, ' '))
-      return
+    if (tokenHash && type === 'recovery') {
+      const supabase = createClient()
+      supabase.auth.verifyOtp({ token_hash: tokenHash, type: 'recovery' })
+        .then(({ error }) => {
+          if (error) {
+            toast.error('Link inválido ou expirado: ' + error.message)
+          } else {
+            setReady(true)
+          }
+        })
+    } else {
+      toast.error('Link inválido. Solicite um novo.')
     }
-
-    const supabase = createClient()
-
-    // Tenta obter sessão ativa (createBrowserClient detecta o hash automaticamente)
-    const init = async () => {
-      // Aguarda o cliente processar o URL hash internamente
-      const { data: { session } } = await supabase.auth.getSession()
-      if (session) {
-        setReady(true)
-        return
-      }
-
-      // Se não processou ainda, escuta o evento de mudança
-      const timer = setTimeout(() => {
-        toast.error('Link expirado ou já utilizado. Solicite um novo.')
-      }, 8000)
-
-      const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-        if (session) {
-          clearTimeout(timer)
-          setReady(true)
-        }
-      })
-
-      return () => {
-        clearTimeout(timer)
-        subscription.unsubscribe()
-      }
-    }
-
-    init()
-  }, [])
+  }, [searchParams])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -108,7 +85,7 @@ export default function ResetPasswordPage() {
           <CardHeader>
             <CardTitle>Definir nova senha</CardTitle>
             <CardDescription>
-              {ready ? 'Digite a sua nova senha de acesso.' : 'Processando link de recuperação...'}
+              {ready ? 'Digite a sua nova senha de acesso.' : 'Verificando link...'}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -151,5 +128,17 @@ export default function ResetPasswordPage() {
         </Card>
       </div>
     </div>
+  )
+}
+
+export default function ResetPasswordPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+      </div>
+    }>
+      <ResetPasswordForm />
+    </Suspense>
   )
 }
