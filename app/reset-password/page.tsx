@@ -20,9 +20,17 @@ export default function ResetPasswordPage() {
 
   useEffect(() => {
     const supabase = createClient()
+    const hash = window.location.hash
+
+    // Se o hash contém um erro, mostra mensagem e para
+    if (hash.includes('error=')) {
+      const params = new URLSearchParams(hash.substring(1))
+      const desc = params.get('error_description') ?? 'Link inválido ou expirado.'
+      toast.error(desc.replace(/\+/g, ' '))
+      return
+    }
 
     // Processa o hash #access_token= que vem do link de recuperação
-    const hash = window.location.hash
     if (hash.includes('access_token=')) {
       const params = new URLSearchParams(hash.substring(1))
       const accessToken = params.get('access_token')
@@ -32,7 +40,7 @@ export default function ResetPasswordPage() {
         supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken })
           .then(({ error }) => {
             if (error) {
-              toast.error('Link inválido ou expirado.')
+              toast.error('Link inválido ou expirado. Solicite um novo.')
             } else {
               setReady(true)
             }
@@ -41,7 +49,7 @@ export default function ResetPasswordPage() {
       }
     }
 
-    // Também aceita via onAuthStateChange (PKCE flow)
+    // Aceita via onAuthStateChange (PKCE flow)
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if ((event === 'SIGNED_IN' || event === 'PASSWORD_RECOVERY') && session) {
         setReady(true)
