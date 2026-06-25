@@ -21,8 +21,9 @@ interface Props {
 type TabStatus = 'pending' | 'paid'
 
 function fmtDate(d: string) {
-  return new Date(d + 'T12:00:00').toLocaleDateString('pt-BR', {
+  return new Date(d).toLocaleDateString('pt-BR', {
     day: '2-digit', month: '2-digit', year: 'numeric',
+    timeZone: 'America/Sao_Paulo',
   })
 }
 
