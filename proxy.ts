@@ -42,6 +42,7 @@ export async function proxy(request: NextRequest) {
   }
 
   // Redireciona autenticados que acessam login/register/raiz
+  // /reset-password é permitido mesmo autenticado (usuário pode estar trocando senha)
   if (user && (pathname === '/login' || pathname === '/register' || pathname === '/')) {
     return NextResponse.redirect(new URL('/dashboard/rankings', request.url))
   }
