@@ -65,7 +65,7 @@ export default function RecurringChargeAlert() {
       .map(r => ({
         rentalId: r.id,
         producerId: r.producer_id,
-        producerName: (r.producers as { full_name: string } | null)?.full_name ?? 'Produtor',
+        producerName: (r.producers as unknown as { full_name: string } | null)?.full_name ?? 'Produtor',
         equipmentName: r.equipment_name,
         monthlyAmount: r.monthly_amount,
         referenceMonth: currentMonth,
