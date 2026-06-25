@@ -262,7 +262,9 @@ export default function CategoriasClient({ producerCategories, platformCategorie
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {(['credito', 'debito'] as const).map(type => {
               const label = type === 'credito' ? 'Receitas' : 'Despesas'
-              const filtered = currentCats.filter(c => c.entry_type === type || c.entry_type === 'ambos')
+              const filtered = currentCats
+                .filter(c => c.entry_type === type || c.entry_type === 'ambos')
+                .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR', { sensitivity: 'base' }))
               return (
                 <div key={type} className="bg-white rounded-xl border overflow-hidden">
                   <div className="px-4 py-3 bg-gray-50 border-b">

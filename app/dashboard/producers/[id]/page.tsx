@@ -36,6 +36,7 @@ export default async function ProducerStatementPage({
       events={events ?? []}
       rentals={rentals ?? []}
       categories={categories}
+      userId={user.id}
     />
   )
 }

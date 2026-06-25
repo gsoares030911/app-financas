@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
-import { Plus, Pencil, Trash2, TrendingUp, TrendingDown, Wallet, Search, Upload, ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react'
+import { Plus, Pencil, Trash2, TrendingUp, TrendingDown, Wallet, Search, Upload, ChevronUp, ChevronDown, ChevronsUpDown, RefreshCw, AlertTriangle } from 'lucide-react'
 import Link from 'next/link'
 import { toast } from 'sonner'
 import { PLATFORM_CATEGORY_LABELS } from '@/lib/types'
@@ -17,15 +17,18 @@ import type { DateRange } from 'react-day-picker'
 
 interface Props {
   initialEntries: PlatformEntry[]
+  needsRenewal?: boolean
 }
 
 function fmt(v: number) {
   return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 }
 
-export default function BilheteriaClient({ initialEntries }: Props) {
+export default function BilheteriaClient({ initialEntries, needsRenewal = false }: Props) {
   const router = useRouter()
   const supabase = createClient()
+  const [renewalDismissed, setRenewalDismissed] = useState(false)
+  const [renewing, setRenewing] = useState(false)
 
   const [entries, setEntries] = useState<PlatformEntry[]>(initialEntries)
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -60,7 +63,7 @@ export default function BilheteriaClient({ initialEntries }: Props) {
         const q = search.toLowerCase()
         return (
           e.description.toLowerCase().includes(q) ||
-          PLATFORM_CATEGORY_LABELS[e.category].toLowerCase().includes(q)
+          (PLATFORM_CATEGORY_LABELS[e.category] ?? e.category).toLowerCase().includes(q)
         )
       })
     return base.sort((a, b) => {
@@ -109,12 +112,59 @@ export default function BilheteriaClient({ initialEntries }: Props) {
     if (data) setEntries(data as PlatformEntry[])
   }
 
+  async function handleRenewYear() {
+    setRenewing(true)
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) { setRenewing(false); return }
+    // Reseta last_launched_month para que o auto-lançamento retome no novo ano
+    await supabase
+      .from('recurring_expenses')
+      .update({ last_launched_month: null })
+      .eq('user_id', user.id)
+      .eq('is_active', true)
+    setRenewing(false)
+    toast.success(`Despesas recorrentes ativadas para ${new Date().getFullYear()}!`)
+    router.refresh()
+  }
+
   const totalReceita = filtered.filter(e => e.entry_type === 'receita').reduce((s, e) => s + Number(e.amount), 0)
   const totalDespesa = filtered.filter(e => e.entry_type === 'despesa').reduce((s, e) => s + Number(e.amount), 0)
   const saldo = totalReceita - totalDespesa
 
   return (
     <div className="space-y-6">
+      {/* Banner de renovação anual */}
+      {needsRenewal && !renewalDismissed && (
+        <div className="flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
+          <AlertTriangle className="h-5 w-5 text-amber-500 shrink-0" />
+          <div className="flex-1">
+            <p className="text-sm font-semibold text-amber-800">
+              Despesas recorrentes pausadas
+            </p>
+            <p className="text-xs text-amber-700 mt-0.5">
+              Os lançamentos automáticos estavam configurados até dezembro de 2026.
+              Deseja continuar os lançamentos mensais em {new Date().getFullYear()}?
+            </p>
+          </div>
+          <div className="flex gap-2 shrink-0">
+            <button
+              onClick={handleRenewYear}
+              disabled={renewing}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-xs font-medium transition-colors disabled:opacity-60"
+            >
+              {renewing ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+              Ativar {new Date().getFullYear()}
+            </button>
+            <button
+              onClick={() => setRenewalDismissed(true)}
+              className="px-3 py-1.5 rounded-lg border border-amber-300 text-amber-700 text-xs font-medium hover:bg-amber-100 transition-colors"
+            >
+              Agora não
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Cards de resumo */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="bg-white rounded-xl border p-4 flex items-center gap-3">
@@ -254,7 +304,7 @@ export default function BilheteriaClient({ initialEntries }: Props) {
                       </div>
                     </td>
                     <td className="px-4 py-3 text-gray-500 hidden sm:table-cell">
-                      {PLATFORM_CATEGORY_LABELS[entry.category]}
+                      {PLATFORM_CATEGORY_LABELS[entry.category] ?? entry.category}
                     </td>
                     <td className={`px-4 py-3 text-right font-semibold whitespace-nowrap ${
                       entry.entry_type === 'receita' ? 'text-green-700' : 'text-red-600'

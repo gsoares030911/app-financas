@@ -3,14 +3,15 @@ import { redirect } from 'next/navigation'
 import { getOrCreateProfile } from '@/lib/supabase/profile'
 import { getAllCategories } from '@/lib/supabase/categories'
 import CategoriasClient from '@/components/configuracoes/CategoriasClient'
+import { isAdmin } from '@/lib/utils/auth'
 
 export default async function ConfiguracoesPage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const profile = await getOrCreateProfile(user.id)
-  if (profile.role !== 'admin') redirect('/dashboard')
+  const profile = await getOrCreateProfile(user.id, user.email ?? undefined)
+  if (!isAdmin(profile.role)) redirect('/dashboard')
 
   const [{ producer: producerCats, platform: platformCats }, { data: recurring }] = await Promise.all([
     getAllCategories(user.id),

@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
   ArrowLeft, Plus, Edit2, Trash2, Mail, Phone, Building2, Hash,
-  ChevronUp, ChevronDown, ChevronsUpDown,
+  ChevronUp, ChevronDown, ChevronsUpDown, FileText,
 } from 'lucide-react'
 import DateRangePicker from '@/components/shared/DateRangePicker'
 import type { DateRange } from 'react-day-picker'
@@ -34,10 +34,11 @@ interface Props {
   events: ProducerEvent[]
   rentals: EquipmentRental[]
   categories?: Category[]
+  userId: string
 }
 
 
-export default function ProducerStatementClient({ producer: initialProducer, entries, events, rentals, categories: propCategories }: Props) {
+export default function ProducerStatementClient({ producer: initialProducer, entries, events, rentals, categories: propCategories, userId }: Props) {
   const systemCats = SYSTEM_CATEGORIES.map(c => ({ ...c, id: c.slug, user_id: '', created_at: '' }))
   const cats = (propCategories && propCategories.length > 0) ? propCategories : systemCats
   const catLabels: Record<string, string> = Object.fromEntries(cats.map(c => [c.slug, c.name]))
@@ -218,6 +219,50 @@ export default function ProducerStatementClient({ producer: initialProducer, ent
     else { toast.success('Aluguel excluído'); router.refresh() }
   }
 
+  async function emitirOP(eventIds: string[], periodFrom?: string, periodTo?: string) {
+    const ids = eventIds.filter(Boolean)
+    if (ids.length === 0 && !periodFrom) {
+      toast.error('Selecione eventos ou um período para emitir a OP')
+      return
+    }
+
+    // Calcular saldo dos lançamentos vinculados
+    const relevantEntries = entries.filter(e => e.event_id && ids.includes(e.event_id))
+    const credits = relevantEntries.filter(e => e.entry_type === 'credito').reduce((s, e) => s + Number(e.amount), 0)
+    const debits  = relevantEntries.filter(e => e.entry_type === 'debito').reduce((s, e) => s + Number(e.amount), 0)
+    const amount  = Math.max(credits - debits, 0)
+
+    // Próximo número da OP
+    const year = new Date().getFullYear()
+    const { count } = await supabase
+      .from('payment_orders')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', userId)
+      .like('order_number', `OP-${year}-%`)
+    const nextNum = String((count ?? 0) + 1).padStart(3, '0')
+    const orderNumber = `OP-${year}-${nextNum}`
+
+    const { data: order, error } = await supabase
+      .from('payment_orders')
+      .insert({
+        user_id: userId,
+        producer_id: producer.id,
+        order_number: orderNumber,
+        amount,
+        status: 'pending',
+        event_ids: ids,
+        period_from: periodFrom ?? null,
+        period_to: periodTo ?? null,
+      })
+      .select()
+      .single()
+
+    if (error || !order) { toast.error('Erro ao criar ordem de pagamento'); return }
+
+    toast.success(`Ordem ${orderNumber} criada`)
+    router.push(`/dashboard/ordens-pagamento/${order.id}`)
+  }
+
   async function bulkSettle(status: 'settled' | 'pending') {
     const ids = [...selectedEventIds]
     if (ids.length === 0) return
@@ -271,8 +316,31 @@ export default function ProducerStatementClient({ producer: initialProducer, ent
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <Card className={`${balance >= 0 ? 'border-green-200 bg-green-50/50' : 'border-red-200 bg-red-50/50'}`}>
           <CardContent className="pt-4">
-            <div className="flex justify-center mb-3">
+            <div className="flex justify-center gap-2 mb-3 flex-wrap">
               <DateRangePicker value={dateRange} onChange={setDateRange} />
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 text-xs border-blue-200 text-blue-700 hover:bg-blue-50"
+                onClick={() => {
+                  const pendingIds = events
+                    .filter(ev => ev.status === 'pending' && (() => {
+                      if (!dateRange?.from) return true
+                      const d = new Date(ev.event_date + 'T12:00:00')
+                      if (dateRange.to) return d >= dateRange.from && d <= dateRange.to
+                      return d >= dateRange.from
+                    })())
+                    .map(ev => ev.id)
+                  emitirOP(
+                    pendingIds,
+                    dateRange?.from?.toISOString().split('T')[0],
+                    dateRange?.to?.toISOString().split('T')[0],
+                  )
+                }}
+              >
+                <FileText className="h-3.5 w-3.5 mr-1" />
+                Emitir OP
+              </Button>
             </div>
             <div className="text-center">
               <p className="text-xs font-medium text-gray-400 mb-0.5">
@@ -503,7 +571,15 @@ export default function ProducerStatementClient({ producer: initialProducer, ent
               <span className="text-sm font-medium text-blue-700">
                 {selectedEventIds.size} evento{selectedEventIds.size !== 1 ? 's' : ''} selecionado{selectedEventIds.size !== 1 ? 's' : ''}
               </span>
-              <div className="flex gap-2 ml-auto">
+              <div className="flex gap-2 ml-auto flex-wrap">
+                <Button
+                  size="sm"
+                  className="bg-blue-600 hover:bg-blue-700 text-white"
+                  onClick={() => emitirOP([...selectedEventIds])}
+                >
+                  <FileText className="h-3.5 w-3.5 mr-1.5" />
+                  Emitir OP
+                </Button>
                 <Button size="sm" variant="outline" onClick={() => bulkSettle('pending')} className="text-gray-600 border-gray-300">
                   Marcar Pendente
                 </Button>

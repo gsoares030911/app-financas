@@ -11,7 +11,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
     redirect('/login')
   }
 
-  const profile = await getOrCreateProfile(user.id)
+  const profile = await getOrCreateProfile(user.id, user.email ?? undefined)
 
   return (
     <div className="flex min-h-screen bg-gray-50">

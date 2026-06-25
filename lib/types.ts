@@ -137,6 +137,32 @@ export interface Category {
   created_at: string
 }
 
+export interface AuditLog {
+  id: string
+  user_id: string | null
+  user_email: string | null
+  action: 'INSERT' | 'UPDATE' | 'DELETE'
+  table_name: string
+  record_id: string | null
+  old_data: Record<string, unknown> | null
+  new_data: Record<string, unknown> | null
+  created_at: string
+}
+
+export interface PaymentOrder {
+  id: string
+  user_id: string
+  producer_id: string
+  order_number: string
+  amount: number
+  status: 'pending' | 'paid'
+  event_ids: string[]
+  period_from: string | null
+  period_to: string | null
+  paid_at: string | null
+  created_at: string
+}
+
 export interface RecurringExpense {
   id: string
   user_id: string
@@ -145,6 +171,7 @@ export interface RecurringExpense {
   amount: number
   billing_day: number
   is_active: boolean
+  last_launched_month: string | null
   created_at: string
 }
 
@@ -203,11 +230,17 @@ export const DEBIT_CATEGORIES: string[] = [
   'taxa_administrativa', 'taxa_impressao', 'voucher', 'juros_emprestimo', 'outros',
 ]
 
-export type UserRole = 'admin' | 'producer'
+export type UserRole =
+  | 'super_admin'           // Acesso total irrestrito
+  | 'admin'                 // Acesso total exceto gestão de usuários
+  | 'financeiro_bilheteria' // Somente módulo Bilheteria Express
+  | 'producer'              // Somente conta própria de produtor
+  | 'financeiro_produtor'   // Financeiro de todos os produtores (sem Bilheteria Express)
 
 export interface Profile {
   id: string
   role: UserRole
+  email: string | null
   producer_id: string | null
   created_at: string
 }
