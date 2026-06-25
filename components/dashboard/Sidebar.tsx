@@ -82,7 +82,7 @@ export default function Sidebar({ user, role }: Props) {
   return (
     <>
       {/* Mobile top bar */}
-      <div className="lg:hidden fixed top-0 left-0 right-0 z-40 bg-white border-b flex items-center justify-between px-4 py-3">
+      <div className="lg:hidden print:hidden fixed top-0 left-0 right-0 z-40 bg-white border-b flex items-center justify-between px-4 py-3">
         <div className="flex items-center">
           <img src="/logo-bilheteria-express.png" alt="Bilheteria Express" className="h-7 w-auto" />
         </div>
@@ -96,7 +96,7 @@ export default function Sidebar({ user, role }: Props) {
       )}
 
       <aside className={cn(
-        'fixed top-0 left-0 z-40 h-full w-64 bg-white border-r flex flex-col transition-transform duration-200',
+        'fixed top-0 left-0 z-40 h-full w-64 bg-white border-r flex flex-col transition-transform duration-200 print:hidden',
         'lg:translate-x-0',
         open ? 'translate-x-0' : '-translate-x-full'
       )}>
