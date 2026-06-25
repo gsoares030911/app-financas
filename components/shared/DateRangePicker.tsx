@@ -111,9 +111,6 @@ export default function DateRangePicker({ value, onChange, placeholder = 'Seleci
         align={align}
         sideOffset={8}
         className="w-auto p-0 flex shadow-lg"
-        onInteractOutside={e => { if (midSelection) e.preventDefault() }}
-        onFocusOutside={e => { if (midSelection) e.preventDefault() }}
-        onEscapeKeyDown={e => { if (midSelection) e.preventDefault() }}
       >
         {/* Presets */}
         <div className="flex flex-col gap-0.5 p-2 border-r min-w-[140px]">
