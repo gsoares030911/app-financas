@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import {
-  TrendingUp, LogOut, Menu, X, Users, Trophy, Ticket,
+  LogOut, Menu, X, Users, Trophy, Ticket,
   Settings, FileText, ShieldCheck, ChevronDown, ChevronRight,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -83,9 +83,8 @@ export default function Sidebar({ user, role }: Props) {
     <>
       {/* Mobile top bar */}
       <div className="lg:hidden fixed top-0 left-0 right-0 z-40 bg-white border-b flex items-center justify-between px-4 py-3">
-        <div className="flex items-center gap-2">
-          <TrendingUp className="h-5 w-5 text-blue-600" />
-          <span className="font-bold text-gray-900">FinançasPRO</span>
+        <div className="flex items-center">
+          <img src="/logo-bilheteria-express.png" alt="Bilheteria Express" className="h-7 w-auto" />
         </div>
         <Button variant="ghost" size="icon" onClick={() => setOpen(!open)}>
           {open ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
@@ -101,9 +100,8 @@ export default function Sidebar({ user, role }: Props) {
         'lg:translate-x-0',
         open ? 'translate-x-0' : '-translate-x-full'
       )}>
-        <div className="flex items-center gap-2 px-6 py-5 border-b">
-          <TrendingUp className="h-6 w-6 text-blue-600" />
-          <span className="text-xl font-bold text-gray-900">FinançasPRO</span>
+        <div className="flex items-center px-6 py-4 border-b">
+          <img src="/logo-bilheteria-express.png" alt="Bilheteria Express" className="h-10 w-auto" />
         </div>
 
         <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
