@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, Fragment } from 'react'
 import { Search, ChevronDown, ChevronRight, Users, List } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import DateRangePicker from '@/components/shared/DateRangePicker'
@@ -283,8 +283,8 @@ export default function LogsClient({ logs }: { logs: AuditLog[] }) {
                           const isOpen = expanded.has(log.id)
                           const cfg = ACTION_CONFIG[log.action]
                           return (
-                            <>
-                              <tr key={log.id} className="hover:bg-gray-50 cursor-pointer transition-colors" onClick={() => toggleExpand(log.id)}>
+                            <Fragment key={log.id}>
+                              <tr className="hover:bg-gray-50 cursor-pointer transition-colors" onClick={() => toggleExpand(log.id)}>
                                 <td className="px-3 py-2.5 text-gray-400">
                                   {isOpen ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
                                 </td>
@@ -296,7 +296,7 @@ export default function LogsClient({ logs }: { logs: AuditLog[] }) {
                                 <td className="px-4 py-2.5 text-gray-800 text-xs font-medium max-w-[260px] truncate">{getSummary(log)}</td>
                               </tr>
                               {isOpen && (
-                                <tr key={`${log.id}-detail`} className="bg-gray-50 border-b">
+                                <tr className="bg-gray-50 border-b">
                                   <td colSpan={5} className="px-8 py-3">
                                     <div className="rounded-lg border bg-white overflow-hidden">
                                       <div className="px-3 py-2 bg-gray-50 border-b text-xs text-gray-400 font-medium">
@@ -307,7 +307,7 @@ export default function LogsClient({ logs }: { logs: AuditLog[] }) {
                                   </td>
                                 </tr>
                               )}
-                            </>
+                            </Fragment>
                           )
                         })}
                       </tbody>
@@ -342,9 +342,8 @@ export default function LogsClient({ logs }: { logs: AuditLog[] }) {
                       const isOpen = expanded.has(log.id)
                       const cfg = ACTION_CONFIG[log.action]
                       return (
-                        <>
+                        <Fragment key={log.id}>
                           <tr
-                            key={log.id}
                             className="hover:bg-gray-50 cursor-pointer transition-colors"
                             onClick={() => toggleExpand(log.id)}
                           >
@@ -370,7 +369,7 @@ export default function LogsClient({ logs }: { logs: AuditLog[] }) {
                             </td>
                           </tr>
                           {isOpen && (
-                            <tr key={`${log.id}-detail`} className="bg-gray-50 border-b">
+                            <tr className="bg-gray-50 border-b">
                               <td colSpan={6} className="px-8 py-3">
                                 <div className="rounded-lg border bg-white overflow-hidden text-xs">
                                   <div className="px-3 py-2 bg-gray-50 border-b text-xs text-gray-400 font-medium">
@@ -381,7 +380,7 @@ export default function LogsClient({ logs }: { logs: AuditLog[] }) {
                               </td>
                             </tr>
                           )}
-                        </>
+                        </Fragment>
                       )
                     })}
                   </tbody>
