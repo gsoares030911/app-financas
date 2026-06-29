@@ -529,7 +529,6 @@ export default function ImportWizard({ initialProducers }: Props) {
           { category: 'emprestimo',          description: `Empréstimo — ${evt.show}`,              amount: evt.loan },
           { category: 'juros_emprestimo',    description: `Juros de Empréstimo — ${evt.show}`,     amount: evt.loanInterest },
           { category: 'outros',              description: `Outros — ${evt.show}`,                  amount: evt.otherExpenses },
-          { category: 'ecad',               description: `ECAD — ${evt.show}`,                     amount: evt.beTaxes },
         ]
         for (const entry of debEntries) {
           if (entry.amount > 0) {
