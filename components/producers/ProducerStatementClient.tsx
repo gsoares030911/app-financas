@@ -475,8 +475,8 @@ export default function ProducerStatementClient({ producer: initialProducer, ent
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todas</SelectItem>
-                  {cats.filter(c => c.is_active).map(c => ({ k: c.slug, v: c.name })).map(({ k, v }) => (
-                    <SelectItem key={k} value={k}>{v}</SelectItem>
+                  {cats.filter(c => c.is_active).sort((a, b) => a.name.localeCompare(b.name, 'pt-BR')).map(c => (
+                    <SelectItem key={c.slug} value={c.slug}>{c.name}</SelectItem>
                   ))}
 
                 </SelectContent>
