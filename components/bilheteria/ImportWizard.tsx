@@ -22,6 +22,7 @@ interface EventGroup {
   show: string
   producerName: string
   totalSales: number
+  totalCardSales: number
   feeCardPix: number
   feeCash: number
   feeService: number
@@ -180,7 +181,8 @@ function parseAPIResponse(entries: BilheteriaEntry[]): {
     const dateSerial = new Date(entry.fechamento).getTime() / 86400000
 
     // semTaxaVoucher é receita de vendas (mesmo padrão "sem taxa" dos demais), não débito
-    const totalSales    = r2((entry.semTaxaCartao ?? 0) + (entry.semTaxaOutros ?? 0) + (entry.semTaxaDinheiro ?? 0) + (entry.semTaxaVoucher ?? 0))
+    const totalSales     = r2((entry.semTaxaCartao ?? 0) + (entry.semTaxaOutros ?? 0) + (entry.semTaxaDinheiro ?? 0) + (entry.semTaxaVoucher ?? 0))
+    const totalCardSales = entry.semTaxaCartao ?? 0
     const voucher       = 0
     // taxaCartao/taxaDinheiro são TAXAS INTEIRAS (ex: 2 = 2%) — multiplica pelas vendas e divide por 100
     const feeCardPix    = r2((entry.semTaxaCartao   ?? 0) * (entry.taxaCartao   ?? 0) / 100)
@@ -204,7 +206,8 @@ function parseAPIResponse(entries: BilheteriaEntry[]): {
 
     const existing = map.get(key)
     if (existing) {
-      existing.totalSales    = r2(existing.totalSales    + totalSales)
+      existing.totalSales     = r2(existing.totalSales     + totalSales)
+      existing.totalCardSales = r2(existing.totalCardSales + totalCardSales)
       existing.feeCardPix    = r2(existing.feeCardPix    + feeCardPix)
       existing.feeCash       = r2(existing.feeCash       + feeCash)
       existing.feeService    = r2(existing.feeService    + feeService)
@@ -226,7 +229,7 @@ function parseAPIResponse(entries: BilheteriaEntry[]): {
         id: key, dateSerial, dateStr,
         session: entry.sessao ?? '',
         show, producerName: producer,
-        totalSales, feeCardPix, feeCash, feeService, feeAdmin, feePrinting,
+        totalSales, totalCardSales, feeCardPix, feeCash, feeService, feeAdmin, feePrinting,
         voucher, advertising, loan, loanInterest, otherExpenses, bonus,
         beGrossProfit, beOtherProfits: 0, beCardFee: 0, beTaxes,
         pix: entry.pix ?? '', phone: entry.celular ?? '', email: entry.email ?? '',
@@ -601,6 +604,25 @@ export default function ImportWizard({ initialProducers }: Props) {
           })
         }
 
+        // Bilheteria Express — despesas: taxa cartão operadora (2,7% sobre vendas cartão + lucro BE)
+        const beCardFeeCost = r2((evt.totalCardSales + evt.beGrossProfit) * 0.027)
+        if (beCardFeeCost > 0) {
+          await supabase.from('platform_entries').insert({
+            user_id: user.id, event_id: eventId, producer_id: producerId,
+            entry_type: 'despesa', category: 'taxa_cartao_be',
+            description: `Taxa Cartão BE — ${evt.show}`, amount: beCardFeeCost, date: evt.dateStr,
+          })
+        }
+
+        // Bilheteria Express — despesas: impostos (13,66% sobre lucro BE)
+        const beTaxCost = r2(evt.beGrossProfit * 0.1366)
+        if (beTaxCost > 0) {
+          await supabase.from('platform_entries').insert({
+            user_id: user.id, event_id: eventId, producer_id: producerId,
+            entry_type: 'despesa', category: 'impostos',
+            description: `Impostos BE — ${evt.show}`, amount: beTaxCost, date: evt.dateStr,
+          })
+        }
 
       } catch (err: unknown) {
         result.errors.push(`"${evt.show}": ${(err as Error).message}`)
