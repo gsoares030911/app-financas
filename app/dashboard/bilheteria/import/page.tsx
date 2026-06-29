@@ -17,8 +17,8 @@ export default async function ImportPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Importar Planilha</h1>
-        <p className="text-sm text-gray-500 mt-1">Upload do fechamento semanal — eventos, taxas e lançamentos automáticos</p>
+        <h1 className="text-2xl font-bold text-gray-900">Consultar Período</h1>
+        <p className="text-sm text-gray-500 mt-1">Selecione o período para buscar os pagamentos e registrar os eventos</p>
       </div>
       <ImportWizard initialProducers={(producers ?? []) as Producer[]} />
     </div>

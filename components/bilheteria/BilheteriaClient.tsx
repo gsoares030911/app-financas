@@ -3,10 +3,10 @@
 import { useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { Button } from '@/components/ui/button'
+import { Button, buttonVariants } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
-import { Plus, Pencil, Trash2, TrendingUp, TrendingDown, Wallet, Search, Upload, ChevronUp, ChevronDown, ChevronsUpDown, RefreshCw, AlertTriangle } from 'lucide-react'
+import { Plus, Pencil, Trash2, TrendingUp, TrendingDown, Wallet, Search, CalendarDays, ChevronUp, ChevronDown, ChevronsUpDown, RefreshCw, AlertTriangle, History } from 'lucide-react'
 import Link from 'next/link'
 import { toast } from 'sonner'
 import { PLATFORM_CATEGORY_LABELS } from '@/lib/types'
@@ -15,16 +15,36 @@ import PlatformEntryDialog from './PlatformEntryDialog'
 import DateRangePicker from '@/components/shared/DateRangePicker'
 import type { DateRange } from 'react-day-picker'
 
+interface ImportPeriod {
+  id: string
+  dt_inicial: string
+  dt_final: string
+  imported_at: string
+  total_registros: number
+}
+
 interface Props {
   initialEntries: PlatformEntry[]
   needsRenewal?: boolean
+  importHistory?: ImportPeriod[]
 }
 
 function fmt(v: number) {
   return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 }
 
-export default function BilheteriaClient({ initialEntries, needsRenewal = false }: Props) {
+function formatPeriodLabel(dtInicial: string, dtFinal: string): string {
+  const from = new Date(dtInicial + 'T12:00:00')
+  const to = new Date(dtFinal + 'T12:00:00')
+  const fromMonth = from.toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' })
+  if (from.getMonth() === to.getMonth() && from.getFullYear() === to.getFullYear()) {
+    return fromMonth.replace('.', '').replace(/^\w/, c => c.toUpperCase())
+  }
+  const toMonth = to.toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' })
+  return `${fromMonth} – ${toMonth}`.replace(/\./g, '')
+}
+
+export default function BilheteriaClient({ initialEntries, needsRenewal = false, importHistory = [] }: Props) {
   const router = useRouter()
   const supabase = createClient()
   const [renewalDismissed, setRenewalDismissed] = useState(false)
@@ -233,11 +253,9 @@ export default function BilheteriaClient({ initialEntries, needsRenewal = false 
                 className="pl-8 h-8 text-sm"
               />
             </div>
-            <Link href="/dashboard/bilheteria/import">
-              <Button size="sm" variant="outline">
-                <Upload className="h-4 w-4 mr-1" />
-                Importar
-              </Button>
+            <Link href="/dashboard/bilheteria/import" className={buttonVariants({ size: 'sm', variant: 'outline' })}>
+              <CalendarDays className="h-4 w-4 mr-1" />
+              Consultar
             </Link>
             <Button size="sm" onClick={openNew}>
               <Plus className="h-4 w-4 mr-1" />
@@ -246,6 +264,57 @@ export default function BilheteriaClient({ initialEntries, needsRenewal = false 
           </div>
         </div>
       </div>
+
+      {/* Histórico de períodos importados */}
+      {importHistory.length > 0 && (
+        <div className="bg-white rounded-xl border p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <History className="h-4 w-4 text-gray-400" />
+            <span className="text-sm font-medium text-gray-600">Histórico de importações</span>
+            {dateRange && (
+              <button
+                onClick={() => setDateRange(undefined)}
+                className="ml-auto text-xs text-blue-600 hover:underline"
+              >
+                Limpar filtro
+              </button>
+            )}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {importHistory.map(period => {
+              const isActive =
+                dateRange?.from?.toISOString().slice(0, 10) === period.dt_inicial &&
+                dateRange?.to?.toISOString().slice(0, 10) === period.dt_final
+              return (
+                <button
+                  key={period.id}
+                  onClick={() => {
+                    if (isActive) {
+                      setDateRange(undefined)
+                    } else {
+                      setDateRange({
+                        from: new Date(period.dt_inicial + 'T12:00:00'),
+                        to: new Date(period.dt_final + 'T12:00:00'),
+                      })
+                    }
+                  }}
+                  title={`${period.total_registros} registros · importado em ${new Date(period.imported_at).toLocaleDateString('pt-BR')}`}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
+                    isActive
+                      ? 'bg-blue-600 border-blue-600 text-white'
+                      : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+                  }`}
+                >
+                  {formatPeriodLabel(period.dt_inicial, period.dt_final)}
+                  <span className={`ml-1.5 text-xs ${isActive ? 'text-blue-100' : 'text-gray-400'}`}>
+                    {period.total_registros}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Tabela */}
       <div className="bg-white rounded-xl border overflow-hidden">

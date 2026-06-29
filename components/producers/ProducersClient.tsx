@@ -19,9 +19,10 @@ interface ProducerWithBalance {
 interface Props {
   producers: Producer[]
   entries: Pick<AccountEntry, 'producer_id' | 'entry_type' | 'amount'>[]
+  paidOrders: { producer_id: string; amount: number }[]
 }
 
-export default function ProducersClient({ producers, entries }: Props) {
+export default function ProducersClient({ producers, entries, paidOrders }: Props) {
   const [search, setSearch] = useState('')
   const [formOpen, setFormOpen] = useState(false)
 
@@ -30,9 +31,10 @@ export default function ProducersClient({ producers, entries }: Props) {
       const pe = entries.filter(e => e.producer_id === producer.id)
       const credits = pe.filter(e => e.entry_type === 'credito').reduce((s, e) => s + e.amount, 0)
       const debits = pe.filter(e => e.entry_type === 'debito').reduce((s, e) => s + e.amount, 0)
-      return { producer, balance: credits - debits }
+      const paid = paidOrders.filter(o => o.producer_id === producer.id).reduce((s, o) => s + o.amount, 0)
+      return { producer, balance: credits - debits - paid }
     })
-  }, [producers, entries])
+  }, [producers, entries, paidOrders])
 
   const filtered = useMemo(() => {
     if (!search.trim()) return producersWithBalance

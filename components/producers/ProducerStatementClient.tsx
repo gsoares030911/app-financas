@@ -35,10 +35,11 @@ interface Props {
   rentals: EquipmentRental[]
   categories?: Category[]
   userId: string
+  paidTotal?: number
 }
 
 
-export default function ProducerStatementClient({ producer: initialProducer, entries, events, rentals, categories: propCategories, userId }: Props) {
+export default function ProducerStatementClient({ producer: initialProducer, entries, events, rentals, categories: propCategories, userId, paidTotal = 0 }: Props) {
   const systemCats = SYSTEM_CATEGORIES.map(c => ({ ...c, id: c.slug, user_id: '', created_at: '' }))
   const cats = (propCategories && propCategories.length > 0) ? propCategories : systemCats
   const catLabels: Record<string, string> = Object.fromEntries(cats.map(c => [c.slug, c.name]))
@@ -96,7 +97,8 @@ export default function ProducerStatementClient({ producer: initialProducer, ent
   const totalCredits = cardEntries.filter(e => e.entry_type === 'credito').reduce((s, e) => s + e.amount, 0)
   const totalDebits  = cardEntries.filter(e => e.entry_type === 'debito').reduce((s, e) => s + e.amount, 0)
   const totalBonus   = cardEntries.filter(e => e.category === 'bonificacao' && e.entry_type === 'credito').reduce((s, e) => s + e.amount, 0)
-  const balance = totalCredits - totalDebits
+  // paidTotal: soma das OPs liquidadas — subtrai do saldo a pagar ao produtor
+  const balance = totalCredits - totalDebits - paidTotal
 
   const salesChartData = useMemo(() => {
     const salesEntries = cardEntries.filter(e => e.entry_type === 'credito' && e.category === 'venda_evento')
@@ -365,6 +367,12 @@ export default function ProducerStatementClient({ producer: initialProducer, ent
                   <p className="text-blue-600 font-semibold text-sm">{formatCurrency(totalBonus)}</p>
                   <p>BV</p>
                 </div>
+                {paidTotal > 0 && (
+                  <div className="text-center">
+                    <p className="text-gray-700 font-semibold text-sm">{formatCurrency(paidTotal)}</p>
+                    <p>Pago</p>
+                  </div>
+                )}
               </div>
 
             </div>

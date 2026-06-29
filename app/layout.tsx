@@ -7,7 +7,7 @@ import { ThemeProvider } from '@/components/ThemeProvider'
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'Finanças Pessoais',
+  title: 'Finanças BE',
   description: 'Controle suas finanças de forma simples e visual',
 }
 

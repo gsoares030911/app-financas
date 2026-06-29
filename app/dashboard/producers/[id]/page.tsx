@@ -18,16 +18,20 @@ export default async function ProducerStatementPage({
     { data: entries },
     { data: events },
     { data: rentals },
+    { data: paidOrders },
     categories,
   ] = await Promise.all([
     supabase.from('producers').select('*').eq('id', id).single(),
     supabase.from('account_entries').select('*').eq('producer_id', id).order('date', { ascending: false }),
     supabase.from('events').select('*').eq('producer_id', id).order('event_date', { ascending: false }),
     supabase.from('equipment_rentals').select('*').eq('producer_id', id).order('created_at', { ascending: false }),
+    supabase.from('payment_orders').select('amount').eq('producer_id', id).eq('status', 'paid'),
     getCategories(user.id),
   ])
 
   if (!producer) notFound()
+
+  const paidTotal = (paidOrders ?? []).reduce((s, o) => s + o.amount, 0)
 
   return (
     <ProducerStatementClient
@@ -37,6 +41,7 @@ export default async function ProducerStatementPage({
       rentals={rentals ?? []}
       categories={categories}
       userId={user.id}
+      paidTotal={paidTotal}
     />
   )
 }

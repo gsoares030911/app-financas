@@ -51,6 +51,12 @@ export default async function BilheteriaPage() {
 
   const needsRenewal = await autoLaunchRecurring(supabase, user.id)
 
+  const { data: importHistory } = await supabase
+    .from('bilheteria_api_imports')
+    .select('id, dt_inicial, dt_final, imported_at, total_registros')
+    .eq('user_id', user.id)
+    .order('dt_inicial', { ascending: false })
+
   const allEntries: PlatformEntry[] = []
   const pageSize = 1000
   let from = 0
@@ -74,7 +80,11 @@ export default async function BilheteriaPage() {
         <h1 className="text-2xl font-bold text-gray-900">Bilheteria Express</h1>
         <p className="text-sm text-gray-500 mt-1">Financeiro da plataforma — receitas e despesas operacionais</p>
       </div>
-      <BilheteriaClient initialEntries={(entries ?? []) as PlatformEntry[]} needsRenewal={needsRenewal} />
+      <BilheteriaClient
+        initialEntries={(entries ?? []) as PlatformEntry[]}
+        needsRenewal={needsRenewal}
+        importHistory={(importHistory ?? []) as { id: string; dt_inicial: string; dt_final: string; imported_at: string; total_registros: number }[]}
+      />
     </div>
   )
 }

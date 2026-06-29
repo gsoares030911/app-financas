@@ -64,7 +64,11 @@ export async function deleteUser(targetUserId: string) {
   if (!isSuperAdmin(profile.role)) return { error: 'Apenas o Super Admin pode excluir usuários' }
 
   const admin = createAdminClient()
+
+  // Exclui o perfil explicitamente antes para evitar conflito de FK
+  await admin.from('profiles').delete().eq('id', targetUserId)
+
   const { error } = await admin.auth.admin.deleteUser(targetUserId)
-  if (error) return { error: error.message }
+  if (error) return { error: error.message || 'Erro ao excluir usuário' }
   return { success: true }
 }
