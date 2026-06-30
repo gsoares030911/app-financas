@@ -36,16 +36,19 @@ interface Props {
   categories?: Category[]
   userId: string
   paidTotal?: number
+  emittedEventIds?: string[]
 }
 
 
-export default function ProducerStatementClient({ producer: initialProducer, entries, events, rentals, categories: propCategories, userId, paidTotal = 0 }: Props) {
+export default function ProducerStatementClient({ producer: initialProducer, entries, events, rentals, categories: propCategories, userId, paidTotal = 0, emittedEventIds = [] }: Props) {
   const systemCats = SYSTEM_CATEGORIES.map(c => ({ ...c, id: c.slug, user_id: '', created_at: '' }))
   const cats = (propCategories && propCategories.length > 0) ? propCategories : systemCats
   const catLabels: Record<string, string> = Object.fromEntries(cats.map(c => [c.slug, c.name]))
   const catBadge: Record<string, string> = Object.fromEntries(cats.map(c => [c.slug, CATEGORY_COLORS[c.color] ?? CATEGORY_COLORS.gray]))
   const router = useRouter()
   const supabase = createClient()
+  // Eventos já cobertos por alguma OP existente — não devem ser reemitidos
+  const emittedSet = useMemo(() => new Set(emittedEventIds), [emittedEventIds])
 
   const [producer, setProducer] = useState(initialProducer)
   const [entryOpen, setEntryOpen] = useState(false)
@@ -229,10 +232,21 @@ export default function ProducerStatementClient({ producer: initialProducer, ent
   }
 
   async function emitirOP(eventIds: string[], periodFrom?: string, periodTo?: string) {
-    const ids = eventIds.filter(Boolean)
-    if (ids.length === 0 && !periodFrom) {
+    const requested = eventIds.filter(Boolean)
+    // Anti-duplicidade: ignora eventos que já estão em alguma OP
+    const ids = requested.filter(id => !emittedSet.has(id))
+    const skipped = requested.length - ids.length
+
+    if (requested.length === 0 && !periodFrom) {
       toast.error('Selecione eventos ou um período para emitir a OP')
       return
+    }
+    if (ids.length === 0) {
+      toast.error('Nenhum evento disponível para emitir (todos já estão em uma OP)')
+      return
+    }
+    if (skipped > 0) {
+      toast(`${skipped} evento(s) já estavam em uma OP e foram ignorados`)
     }
 
     // Calcular saldo dos lançamentos vinculados

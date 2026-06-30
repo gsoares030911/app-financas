@@ -18,20 +18,22 @@ export default async function ProducerStatementPage({
     { data: entries },
     { data: events },
     { data: rentals },
-    { data: paidOrders },
+    { data: orders },
     categories,
   ] = await Promise.all([
     supabase.from('producers').select('*').eq('id', id).single(),
     supabase.from('account_entries').select('*').eq('producer_id', id).order('date', { ascending: false }),
     supabase.from('events').select('*').eq('producer_id', id).order('event_date', { ascending: false }),
     supabase.from('equipment_rentals').select('*').eq('producer_id', id).order('created_at', { ascending: false }),
-    supabase.from('payment_orders').select('amount').eq('producer_id', id).eq('status', 'paid'),
+    supabase.from('payment_orders').select('amount, status, event_ids').eq('producer_id', id),
     getCategories(user.id),
   ])
 
   if (!producer) notFound()
 
-  const paidTotal = (paidOrders ?? []).reduce((s, o) => s + o.amount, 0)
+  const paidTotal = (orders ?? []).filter(o => o.status === 'paid').reduce((s, o) => s + o.amount, 0)
+  // Eventos já cobertos por alguma OP (pendente ou paga) — não devem ser reemitidos
+  const emittedEventIds = [...new Set((orders ?? []).flatMap(o => o.event_ids ?? []))]
 
   return (
     <ProducerStatementClient
@@ -42,6 +44,7 @@ export default async function ProducerStatementPage({
       categories={categories}
       userId={user.id}
       paidTotal={paidTotal}
+      emittedEventIds={emittedEventIds}
     />
   )
 }
