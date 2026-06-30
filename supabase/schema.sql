@@ -191,7 +191,7 @@ create table if not exists public.platform_entries (
   entry_type text not null check (entry_type in ('receita', 'despesa')),
   category text not null check (category in (
     'taxa_evento', 'publicidade', 'servicos', 'outros_receita',
-    'infraestrutura', 'marketing', 'pessoal', 'impostos', 'outros_despesa'
+    'infraestrutura', 'marketing', 'pessoal', 'taxa_cartao', 'impostos', 'outros_despesa'
   )),
   description text not null,
   amount numeric(12,2) not null check (amount > 0),

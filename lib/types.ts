@@ -307,6 +307,7 @@ export type PlatformCategory =
   | 'infraestrutura'
   | 'marketing'
   | 'pessoal'
+  | 'taxa_cartao'
   | 'impostos'
   | 'outros_despesa'
 
@@ -318,6 +319,7 @@ export const PLATFORM_CATEGORY_LABELS: Record<PlatformCategory, string> = {
   infraestrutura: 'Infraestrutura',
   marketing: 'Marketing',
   pessoal: 'Pessoal',
+  taxa_cartao: 'Taxa de Cartão',
   impostos: 'Impostos',
   outros_despesa: 'Outras Despesas',
 }
@@ -326,7 +328,7 @@ export const PLATFORM_REVENUE_CATEGORIES: PlatformCategory[] = [
   'taxa_evento', 'publicidade', 'servicos', 'outros_receita',
 ]
 export const PLATFORM_EXPENSE_CATEGORIES: PlatformCategory[] = [
-  'infraestrutura', 'marketing', 'pessoal', 'impostos', 'outros_despesa',
+  'infraestrutura', 'marketing', 'pessoal', 'taxa_cartao', 'impostos', 'outros_despesa',
 ]
 
 export interface PlatformEntry {

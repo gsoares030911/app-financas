@@ -607,21 +607,23 @@ export default function ImportWizard({ initialProducers }: Props) {
         // Bilheteria Express — despesas: taxa cartão operadora (2,7% sobre vendas cartão + lucro BE)
         const beCardFeeCost = r2((evt.totalCardSales + evt.beGrossProfit) * 0.027)
         if (beCardFeeCost > 0) {
-          await supabase.from('platform_entries').insert({
+          const { error: eCard } = await supabase.from('platform_entries').insert({
             user_id: user.id, event_id: eventId, producer_id: producerId,
-            entry_type: 'despesa', category: 'taxa_cartao_be',
+            entry_type: 'despesa', category: 'taxa_cartao',
             description: `Taxa Cartão BE — ${evt.show}`, amount: beCardFeeCost, date: evt.dateStr,
           })
+          if (eCard) throw eCard
         }
 
         // Bilheteria Express — despesas: impostos (13,66% sobre lucro BE)
         const beTaxCost = r2(evt.beGrossProfit * 0.1366)
         if (beTaxCost > 0) {
-          await supabase.from('platform_entries').insert({
+          const { error: eTax } = await supabase.from('platform_entries').insert({
             user_id: user.id, event_id: eventId, producer_id: producerId,
             entry_type: 'despesa', category: 'impostos',
             description: `Impostos BE — ${evt.show}`, amount: beTaxCost, date: evt.dateStr,
           })
+          if (eTax) throw eTax
         }
 
       } catch (err: unknown) {
