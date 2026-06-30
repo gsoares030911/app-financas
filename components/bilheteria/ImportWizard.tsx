@@ -182,12 +182,15 @@ function parseAPIResponse(entries: BilheteriaEntry[]): {
     const key        = `${dateStr}|${show}|${producer}`
     const dateSerial = new Date(entry.fechamento).getTime() / 86400000
 
-    // Bruto do produtor = só CARTÃO/ONLINE + OUTROS (o que a BE efetivamente coletou).
-    // Dinheiro e voucher são recebidos na bilheteria física (TEATRO/PDV) — saem do bruto
-    // do produtor e NÃO entram na conta da BE; rastreados à parte só para discriminação.
-    const totalSales     = r2((entry.semTaxaCartao ?? 0) + (entry.semTaxaOutros ?? 0))
+    // Vendas em DINHEIRO e VOUCHER são recebidas direto na bilheteria física (TEATRO/PDV):
+    // FICAM no bruto do produtor, mas SAEM do líquido (entram como débito na conta do produtor,
+    // pois a BE não recebeu esse dinheiro). NÃO entram na conta da BE — só as taxas (dinheiro
+    // 2%, impressão) viram receita da BE.
     const cashSales      = entry.semTaxaDinheiro ?? 0
     const voucherSales   = entry.semTaxaVoucher ?? 0
+    const totalSales     = r2((entry.semTaxaCartao ?? 0) + (entry.semTaxaOutros ?? 0) + cashSales + voucherSales)
+    // Base da BE (taxa de serviço e lucro BE) = só cartão/online + outros (sem dinheiro/voucher)
+    const beBase         = r2((entry.semTaxaCartao ?? 0) + (entry.semTaxaOutros ?? 0))
     const totalCardSales = entry.semTaxaCartao ?? 0
     const voucher       = 0
     const isTeatroPdv   = entry.tipo === 'TEATRO' || entry.tipo === 'PDV'
@@ -196,18 +199,17 @@ function parseAPIResponse(entries: BilheteriaEntry[]): {
     // Taxa de dinheiro (≈2%) só nas vendas TEATRO/PDV — vira receita da BE e débito do produtor.
     // Voucher NÃO paga essa taxa (só a impressão/emissão, via feePrinting abaixo).
     const feeCash       = isTeatroPdv ? r2((entry.semTaxaDinheiro ?? 0) * (entry.taxaDinheiro ?? 0) / 100) : 0
-    // taxaServicoPercentual é INTEGER % (ex: 7 = 7%) — divide por 100 para obter valor em R$
-    // Incide só sobre o bruto (cartão+outros), não sobre dinheiro/voucher.
-    // taxaServicoFixa e valorLocacao só incidem quando há ingressos vendidos
+    // taxaServicoPercentual é INTEGER % (ex: 7 = 7%) — divide por 100 para obter valor em R$.
+    // Incide só sobre a base BE (cartão+outros), não sobre dinheiro/voucher.
     const hasActivity   = totalSales > 0 || (entry.qtdIngressos ?? 0) > 0
-    const feeServiceQ   = r2(totalSales * (entry.taxaServicoPercentual ?? 0) / 100)
+    const feeServiceQ   = r2(beBase * (entry.taxaServicoPercentual ?? 0) / 100)
     const feeService    = hasActivity ? r2(feeServiceQ + (entry.taxaServicoFixa ?? 0) + (entry.valorLocacao ?? 0)) : feeServiceQ
     const feeAdmin      = entry.taxaSistema         ?? 0
     // valorImpressaoUnitario é o valor POR ingresso — total = unitário × qtd.
     // Ingresso ONLINE é digital — sem taxa de impressão/emissão.
     const feePrinting   = entry.tipo === 'ONLINE' ? 0 : r2((entry.valorImpressaoUnitario ?? 0) * (entry.qtdIngressos ?? 0))
-    // taxa é decimal (ex: 0.15 = 15%) — LUCRO BE, não debitado do produtor
-    const beGrossProfit = r2(totalSales * (entry.taxa ?? 0))
+    // taxa é decimal (ex: 0.15 = 15%) — LUCRO BE, só sobre a base BE (cartão+outros)
+    const beGrossProfit = r2(beBase * (entry.taxa ?? 0))
     const advertising   = entry.valorAnuncio        ?? 0
     const loan          = entry.valorEmprestimo     ?? 0
     const loanInterest  = entry.jurosEmprestimo     ?? 0
@@ -261,7 +263,8 @@ function parseAPIResponse(entries: BilheteriaEntry[]): {
 
 function evtTotalDebits(e: EventGroup) {
   return r2(e.feeCardPix + e.feeCash + e.feeService + e.feeAdmin + e.feePrinting
-    + e.voucher + e.advertising + e.loan + e.loanInterest + e.otherExpenses)
+    + e.voucher + e.cashSales + e.voucherSales
+    + e.advertising + e.loan + e.loanInterest + e.otherExpenses)
 }
 
 function evtLiquid(e: EventGroup) {
@@ -540,7 +543,7 @@ export default function ImportWizard({ initialProducers }: Props) {
           { category: 'taxa_servico',        description: `Taxa de Serviço — ${evt.show}`,         amount: evt.feeService },
           { category: 'taxa_administrativa', description: `Taxa Administrativa — ${evt.show}`,     amount: evt.feeAdmin },
           { category: 'taxa_impressao',      description: `Taxa Impressão/Envio — ${evt.show}`,    amount: evt.feePrinting },
-          { category: 'voucher',             description: `Voucher/Outros Sistemas — ${evt.show}`, amount: evt.voucher },
+          { category: 'voucher',             description: `Vendas Dinheiro/Voucher (recebidas na bilheteria) — ${evt.show}`, amount: r2(evt.cashSales + evt.voucherSales) },
           { category: 'anuncio',             description: `Anúncio — ${evt.show}`,                 amount: evt.advertising },
           { category: 'emprestimo',          description: `Empréstimo — ${evt.show}`,              amount: evt.loan },
           { category: 'juros_emprestimo',    description: `Juros de Empréstimo — ${evt.show}`,     amount: evt.loanInterest },
