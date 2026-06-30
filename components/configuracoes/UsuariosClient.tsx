@@ -268,7 +268,7 @@ export default function UsuariosClient({ profiles: initial, currentUserId, curre
               <tr>
                 <td colSpan={canManage ? 4 : 3} className="px-4 py-2.5 text-xs text-gray-400">
                   {profiles.length} usuário{profiles.length !== 1 ? 's' : ''} cadastrado{profiles.length !== 1 ? 's' : ''}
-                  {!canManage && ' · Apenas o Super Admin pode gerenciar usuários'}
+                  {!canManage && ' · Apenas Super Admin e Administradores podem gerenciar usuários'}
                 </td>
               </tr>
             </tfoot>

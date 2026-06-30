@@ -62,10 +62,12 @@ create index if not exists producers_user_id_idx on public.producers(user_id);
 
 alter table public.producers enable row level security;
 
-create policy "Usuários gerenciam seus produtores"
+-- Dados compartilhados entre todos os usuários autenticados (uso interno
+-- de uma única organização) — ver supabase/migrations/2026-06-30_shared_access_rls.sql
+create policy "producers_shared_access"
   on public.producers for all
-  using (auth.uid() = user_id)
-  with check (auth.uid() = user_id);
+  using (auth.role() = 'authenticated')
+  with check (auth.role() = 'authenticated');
 
 -- Aluguéis de equipamentos (declarado antes de account_entries por causa da FK)
 create table if not exists public.equipment_rentals (
@@ -85,22 +87,10 @@ create index if not exists equipment_rentals_producer_id_idx on public.equipment
 
 alter table public.equipment_rentals enable row level security;
 
-create policy "Usuários gerenciam seus aluguéis"
+create policy "equipment_rentals_shared_access"
   on public.equipment_rentals for all
-  using (
-    exists (
-      select 1 from public.producers
-      where producers.id = equipment_rentals.producer_id
-      and producers.user_id = auth.uid()
-    )
-  )
-  with check (
-    exists (
-      select 1 from public.producers
-      where producers.id = equipment_rentals.producer_id
-      and producers.user_id = auth.uid()
-    )
-  );
+  using (auth.role() = 'authenticated')
+  with check (auth.role() = 'authenticated');
 
 -- Eventos por produtor
 create table if not exists public.events (
@@ -120,22 +110,10 @@ create index if not exists events_producer_id_idx on public.events(producer_id);
 
 alter table public.events enable row level security;
 
-create policy "Usuários gerenciam seus eventos"
+create policy "events_shared_access"
   on public.events for all
-  using (
-    exists (
-      select 1 from public.producers
-      where producers.id = events.producer_id
-      and producers.user_id = auth.uid()
-    )
-  )
-  with check (
-    exists (
-      select 1 from public.producers
-      where producers.id = events.producer_id
-      and producers.user_id = auth.uid()
-    )
-  );
+  using (auth.role() = 'authenticated')
+  with check (auth.role() = 'authenticated');
 
 -- Lançamentos da conta corrente
 create table if not exists public.account_entries (
@@ -164,22 +142,10 @@ create index if not exists account_entries_date_idx on public.account_entries(da
 
 alter table public.account_entries enable row level security;
 
-create policy "Usuários gerenciam seus lançamentos"
+create policy "account_entries_shared_access"
   on public.account_entries for all
-  using (
-    exists (
-      select 1 from public.producers
-      where producers.id = account_entries.producer_id
-      and producers.user_id = auth.uid()
-    )
-  )
-  with check (
-    exists (
-      select 1 from public.producers
-      where producers.id = account_entries.producer_id
-      and producers.user_id = auth.uid()
-    )
-  );
+  using (auth.role() = 'authenticated')
+  with check (auth.role() = 'authenticated');
 
 -- =============================================
 -- Financeiro da Plataforma (Bilheteria Express)
@@ -206,7 +172,7 @@ create index if not exists platform_entries_date_idx on public.platform_entries(
 
 alter table public.platform_entries enable row level security;
 
-create policy "Usuários gerenciam seus lançamentos da plataforma"
+create policy "platform_entries_shared_access"
   on public.platform_entries for all
-  using (auth.uid() = user_id)
-  with check (auth.uid() = user_id);
+  using (auth.role() = 'authenticated')
+  with check (auth.role() = 'authenticated');

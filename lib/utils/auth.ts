@@ -35,5 +35,5 @@ export function canAccessProdutores(role: UserRole): boolean {
 }
 
 export function canManageUsers(role: UserRole): boolean {
-  return role === 'super_admin'
+  return role === 'super_admin' || role === 'admin'
 }

@@ -3,7 +3,7 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { getOrCreateProfile } from '@/lib/supabase/profile'
-import { isSuperAdmin } from '@/lib/utils/auth'
+import { isAdmin } from '@/lib/utils/auth'
 import type { UserRole } from '@/lib/types'
 
 export async function createUser(email: string, password: string, role: UserRole) {
@@ -12,7 +12,8 @@ export async function createUser(email: string, password: string, role: UserRole
   if (!caller) return { error: 'Não autenticado' }
 
   const profile = await getOrCreateProfile(caller.id, caller.email ?? undefined)
-  if (!isSuperAdmin(profile.role)) return { error: 'Apenas o Super Admin pode criar usuários' }
+  if (!isAdmin(profile.role)) return { error: 'Apenas administradores podem criar usuários' }
+  if (role === 'super_admin') return { error: 'Não é possível criar um novo Super Admin' }
 
   const admin = createAdminClient()
 
@@ -43,9 +44,16 @@ export async function updateUserRole(targetUserId: string, newRole: UserRole) {
   if (!caller) return { error: 'Não autenticado' }
 
   const profile = await getOrCreateProfile(caller.id, caller.email ?? undefined)
-  if (!isSuperAdmin(profile.role)) return { error: 'Apenas o Super Admin pode alterar roles' }
+  if (!isAdmin(profile.role)) return { error: 'Apenas administradores podem alterar perfis' }
 
   const admin = createAdminClient()
+
+  // Proteção server-side: o Super Admin nunca pode ter o perfil alterado,
+  // independente do que a UI permitir.
+  const { data: target } = await admin.from('profiles').select('role').eq('id', targetUserId).single()
+  if (target?.role === 'super_admin') return { error: 'O perfil do Super Admin não pode ser alterado' }
+  if (newRole === 'super_admin') return { error: 'Não é possível promover um usuário a Super Admin' }
+
   const { error } = await admin
     .from('profiles')
     .update({ role: newRole })
@@ -61,9 +69,15 @@ export async function deleteUser(targetUserId: string) {
   if (!caller) return { error: 'Não autenticado' }
 
   const profile = await getOrCreateProfile(caller.id, caller.email ?? undefined)
-  if (!isSuperAdmin(profile.role)) return { error: 'Apenas o Super Admin pode excluir usuários' }
+  if (!isAdmin(profile.role)) return { error: 'Apenas administradores podem excluir usuários' }
+  if (targetUserId === caller.id) return { error: 'Você não pode excluir a si mesmo' }
 
   const admin = createAdminClient()
+
+  // Proteção server-side: o Super Admin nunca pode ser excluído,
+  // independente do que a UI permitir.
+  const { data: target } = await admin.from('profiles').select('role').eq('id', targetUserId).single()
+  if (target?.role === 'super_admin') return { error: 'O Super Admin não pode ser excluído' }
 
   // Exclui o perfil explicitamente antes para evitar conflito de FK
   await admin.from('profiles').delete().eq('id', targetUserId)
