@@ -23,6 +23,8 @@ interface EventGroup {
   producerName: string
   totalSales: number
   totalCardSales: number
+  cashSales: number
+  voucherSales: number
   feeCardPix: number
   feeCash: number
   feeService: number
@@ -180,21 +182,30 @@ function parseAPIResponse(entries: BilheteriaEntry[]): {
     const key        = `${dateStr}|${show}|${producer}`
     const dateSerial = new Date(entry.fechamento).getTime() / 86400000
 
-    // semTaxaVoucher é receita de vendas (mesmo padrão "sem taxa" dos demais), não débito
-    const totalSales     = r2((entry.semTaxaCartao ?? 0) + (entry.semTaxaOutros ?? 0) + (entry.semTaxaDinheiro ?? 0) + (entry.semTaxaVoucher ?? 0))
+    // Bruto do produtor = só CARTÃO/ONLINE + OUTROS (o que a BE efetivamente coletou).
+    // Dinheiro e voucher são recebidos na bilheteria física (TEATRO/PDV) — saem do bruto
+    // do produtor e NÃO entram na conta da BE; rastreados à parte só para discriminação.
+    const totalSales     = r2((entry.semTaxaCartao ?? 0) + (entry.semTaxaOutros ?? 0))
+    const cashSales      = entry.semTaxaDinheiro ?? 0
+    const voucherSales   = entry.semTaxaVoucher ?? 0
     const totalCardSales = entry.semTaxaCartao ?? 0
     const voucher       = 0
+    const isTeatroPdv   = entry.tipo === 'TEATRO' || entry.tipo === 'PDV'
     // taxaCartao/taxaDinheiro são TAXAS INTEIRAS (ex: 2 = 2%) — multiplica pelas vendas e divide por 100
     const feeCardPix    = r2((entry.semTaxaCartao   ?? 0) * (entry.taxaCartao   ?? 0) / 100)
-    const feeCash       = r2((entry.semTaxaDinheiro ?? 0) * (entry.taxaDinheiro ?? 0) / 100)
+    // Taxa de dinheiro (≈2%) só nas vendas TEATRO/PDV — vira receita da BE e débito do produtor.
+    // Voucher NÃO paga essa taxa (só a impressão/emissão, via feePrinting abaixo).
+    const feeCash       = isTeatroPdv ? r2((entry.semTaxaDinheiro ?? 0) * (entry.taxaDinheiro ?? 0) / 100) : 0
     // taxaServicoPercentual é INTEGER % (ex: 7 = 7%) — divide por 100 para obter valor em R$
+    // Incide só sobre o bruto (cartão+outros), não sobre dinheiro/voucher.
     // taxaServicoFixa e valorLocacao só incidem quando há ingressos vendidos
     const hasActivity   = totalSales > 0 || (entry.qtdIngressos ?? 0) > 0
     const feeServiceQ   = r2(totalSales * (entry.taxaServicoPercentual ?? 0) / 100)
     const feeService    = hasActivity ? r2(feeServiceQ + (entry.taxaServicoFixa ?? 0) + (entry.valorLocacao ?? 0)) : feeServiceQ
     const feeAdmin      = entry.taxaSistema         ?? 0
-    // valorImpressaoUnitario é o valor POR ingresso — total = unitário × qtd
-    const feePrinting   = r2((entry.valorImpressaoUnitario ?? 0) * (entry.qtdIngressos ?? 0))
+    // valorImpressaoUnitario é o valor POR ingresso — total = unitário × qtd.
+    // Ingresso ONLINE é digital — sem taxa de impressão/emissão.
+    const feePrinting   = entry.tipo === 'ONLINE' ? 0 : r2((entry.valorImpressaoUnitario ?? 0) * (entry.qtdIngressos ?? 0))
     // taxa é decimal (ex: 0.15 = 15%) — LUCRO BE, não debitado do produtor
     const beGrossProfit = r2(totalSales * (entry.taxa ?? 0))
     const advertising   = entry.valorAnuncio        ?? 0
@@ -208,6 +219,8 @@ function parseAPIResponse(entries: BilheteriaEntry[]): {
     if (existing) {
       existing.totalSales     = r2(existing.totalSales     + totalSales)
       existing.totalCardSales = r2(existing.totalCardSales + totalCardSales)
+      existing.cashSales      = r2(existing.cashSales      + cashSales)
+      existing.voucherSales   = r2(existing.voucherSales   + voucherSales)
       existing.feeCardPix    = r2(existing.feeCardPix    + feeCardPix)
       existing.feeCash       = r2(existing.feeCash       + feeCash)
       existing.feeService    = r2(existing.feeService    + feeService)
@@ -229,7 +242,7 @@ function parseAPIResponse(entries: BilheteriaEntry[]): {
         id: key, dateSerial, dateStr,
         session: entry.sessao ?? '',
         show, producerName: producer,
-        totalSales, totalCardSales, feeCardPix, feeCash, feeService, feeAdmin, feePrinting,
+        totalSales, totalCardSales, cashSales, voucherSales, feeCardPix, feeCash, feeService, feeAdmin, feePrinting,
         voucher, advertising, loan, loanInterest, otherExpenses, bonus,
         beGrossProfit, beOtherProfits: 0, beCardFee: 0, beTaxes,
         pix: entry.pix ?? '', phone: entry.celular ?? '', email: entry.email ?? '',
@@ -860,6 +873,7 @@ export default function ImportWizard({ initialProducers }: Props) {
                   <th className="px-3 py-2 text-left text-gray-500 font-medium">Espetáculo</th>
                   <th className="px-3 py-2 text-left text-gray-500 font-medium">Produtor</th>
                   <th className="px-3 py-2 text-right text-gray-500 font-medium">Bruto</th>
+                  <th className="px-3 py-2 text-right text-gray-500 font-medium">Dinh./Voucher</th>
                   <th className="px-3 py-2 text-right text-gray-500 font-medium">Taxas BE</th>
                   <th className="px-3 py-2 text-right text-gray-500 font-medium">Outros Déb.</th>
                   <th className="px-3 py-2 text-right text-gray-500 font-medium">Bônus</th>
@@ -870,6 +884,7 @@ export default function ImportWizard({ initialProducers }: Props) {
                 {events.map(evt => {
                   const taxasBE    = r2(evt.feeCardPix + evt.feeCash + evt.feeService + evt.feeAdmin + evt.feePrinting)
                   const outrosDebs = r2(evt.voucher + evt.advertising + evt.loan + evt.loanInterest + evt.otherExpenses)
+                  const dinhVouch  = r2(evt.cashSales + evt.voucherSales)
                   const liq        = evtLiquid(evt)
                   return (
                     <tr key={evt.id} className={`transition-colors ${evt.selected ? 'hover:bg-gray-50' : 'opacity-40 bg-gray-50'}`}>
@@ -887,6 +902,7 @@ export default function ImportWizard({ initialProducers }: Props) {
                       <td className="px-3 py-2 font-medium text-gray-800 max-w-[180px] truncate">{evt.show}</td>
                       <td className="px-3 py-2 text-gray-500 max-w-[130px] truncate">{evt.producerName}</td>
                       <td className="px-3 py-2 text-right text-gray-700">{fmt(evt.totalSales)}</td>
+                      <td className="px-3 py-2 text-right text-purple-500">{dinhVouch > 0 ? fmt(dinhVouch) : '—'}</td>
                       <td className="px-3 py-2 text-right text-red-500">{taxasBE    > 0 ? fmt(taxasBE)    : '—'}</td>
                       <td className="px-3 py-2 text-right text-orange-500">{outrosDebs > 0 ? fmt(outrosDebs) : '—'}</td>
                       <td className="px-3 py-2 text-right text-blue-500">{evt.bonus  > 0 ? fmt(evt.bonus)  : '—'}</td>
@@ -901,6 +917,9 @@ export default function ImportWizard({ initialProducers }: Props) {
                 <tr>
                   <td colSpan={4} className="px-3 py-2 text-xs font-medium text-gray-500">Total ({selectedCount} eventos)</td>
                   <td className="px-3 py-2 text-right text-xs font-semibold text-gray-700">{fmt(totGross)}</td>
+                  <td className="px-3 py-2 text-right text-xs font-semibold text-purple-500">
+                    {fmt(selEvts.reduce((s, e) => s + r2(e.cashSales + e.voucherSales), 0))}
+                  </td>
                   <td className="px-3 py-2 text-right text-xs font-semibold text-red-500">
                     {fmt(selEvts.reduce((s, e) => s + r2(e.feeCardPix + e.feeCash + e.feeService + e.feeAdmin + e.feePrinting), 0))}
                   </td>

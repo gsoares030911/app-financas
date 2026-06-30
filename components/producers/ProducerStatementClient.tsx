@@ -100,6 +100,9 @@ export default function ProducerStatementClient({ producer: initialProducer, ent
   const totalCredits = cardEntries.filter(e => e.entry_type === 'credito').reduce((s, e) => s + e.amount, 0)
   const totalDebits  = cardEntries.filter(e => e.entry_type === 'debito').reduce((s, e) => s + e.amount, 0)
   const totalBonus   = cardEntries.filter(e => e.category === 'bonificacao' && e.entry_type === 'credito').reduce((s, e) => s + e.amount, 0)
+  // "Valor Bruto" = vendas, SEM o BV (bonificação). O BV continua no saldo (é crédito do produtor),
+  // só não é somado no bruto.
+  const totalGross   = totalCredits - totalBonus
   // paidTotal: soma das OPs liquidadas — subtrai do saldo a pagar ao produtor
   const balance = totalCredits - totalDebits - paidTotal
 
@@ -377,7 +380,7 @@ export default function ProducerStatementClient({ producer: initialProducer, ent
               </p>
               <div className="flex justify-center gap-6 mt-4 text-xs text-gray-500">
                 <div className="text-center">
-                  <p className="text-green-600 font-semibold text-sm">{formatCurrency(totalCredits)}</p>
+                  <p className="text-green-600 font-semibold text-sm">{formatCurrency(totalGross)}</p>
                   <p>Valor Bruto</p>
                 </div>
                 <div className="text-center">
