@@ -32,10 +32,11 @@ interface Props {
   entries: Pick<AccountEntry, 'producer_id' | 'event_id' | 'entry_type' | 'amount'>[]
   events: { id: string; producer_id: string; event_date: string; status: string }[]
   paidOrders: { producer_id: string; amount: number }[]
+  emittedEventIds: string[]
   userId: string
 }
 
-export default function ProducersClient({ producers, entries, events, paidOrders, userId }: Props) {
+export default function ProducersClient({ producers, entries, events, paidOrders, emittedEventIds, userId }: Props) {
   const router = useRouter()
   const supabase = createClient()
   const [search, setSearch] = useState('')
@@ -45,6 +46,8 @@ export default function ProducersClient({ producers, entries, events, paidOrders
   const [emitting, setEmitting] = useState(false)
 
   const periodActive = !!dateRange?.from
+  // Eventos já cobertos por alguma OP existente — não entram no lote
+  const emittedSet = useMemo(() => new Set(emittedEventIds), [emittedEventIds])
 
   // ───── Visão acumulada (comportamento original, inalterado) ─────
   const producersWithBalance = useMemo((): ProducerWithBalance[] => {
@@ -82,6 +85,7 @@ export default function ProducersClient({ producers, entries, events, paidOrders
         const eventIds = events
           .filter(ev => {
             if (ev.producer_id !== producer.id || ev.status !== 'pending') return false
+            if (emittedSet.has(ev.id)) return false // já está em uma OP existente
             const d = new Date(ev.event_date + 'T12:00:00')
             return d >= from && d <= to
           })
@@ -94,7 +98,7 @@ export default function ProducersClient({ producers, entries, events, paidOrders
         return { producer, eventIds, payable: Math.max(credits - debits, 0) }
       })
       .filter(p => p.payable > 0)
-  }, [periodActive, dateRange, producers, events, entries])
+  }, [periodActive, dateRange, producers, events, entries, emittedSet])
 
   const filteredPeriod = useMemo(() => {
     if (!search.trim()) return periodPayables

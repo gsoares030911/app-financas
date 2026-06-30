@@ -26,20 +26,27 @@ export default async function ProducersPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const [producers, entries, events, { data: paidOrders }] = await Promise.all([
+  const [producers, entries, events, orders] = await Promise.all([
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     fetchAll(supabase, 'producers', '*', (q: any) => q.order('full_name')),
     fetchAll(supabase, 'account_entries', 'producer_id, event_id, entry_type, amount'),
     fetchAll(supabase, 'events', 'id, producer_id, event_date, status'),
-    supabase.from('payment_orders').select('producer_id, amount').eq('status', 'paid'),
+    fetchAll(supabase, 'payment_orders', 'producer_id, amount, status, event_ids'),
   ])
+
+  const paidOrders = orders
+    .filter(o => o.status === 'paid')
+    .map(o => ({ producer_id: o.producer_id, amount: o.amount }))
+  // Eventos já cobertos por alguma OP (pendente ou paga) — não devem ser reemitidos
+  const emittedEventIds = [...new Set(orders.flatMap(o => o.event_ids ?? []))]
 
   return (
     <ProducersClient
       producers={producers ?? []}
       entries={entries ?? []}
       events={events ?? []}
-      paidOrders={paidOrders ?? []}
+      paidOrders={paidOrders}
+      emittedEventIds={emittedEventIds}
       userId={user.id}
     />
   )
