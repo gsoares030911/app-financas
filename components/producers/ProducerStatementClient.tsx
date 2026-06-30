@@ -208,10 +208,14 @@ export default function ProducerStatementClient({ producer: initialProducer, ent
   }
 
   async function deleteEvent(id: string) {
-    if (!confirm('Excluir este evento?')) return
+    if (!confirm('Excluir este evento e todos os seus lançamentos?')) return
+    // A FK é "on delete set null", então os lançamentos não somem sozinhos.
+    // Removemos primeiro os vinculados (conta corrente + P&L da plataforma) por event_id.
+    const { error: eAcc } = await supabase.from('account_entries').delete().eq('event_id', id)
+    const { error: ePlat } = await supabase.from('platform_entries').delete().eq('event_id', id)
     const { error } = await supabase.from('events').delete().eq('id', id)
-    if (error) toast.error('Erro ao excluir')
-    else { toast.success('Evento excluído'); router.refresh() }
+    if (eAcc || ePlat || error) toast.error('Erro ao excluir')
+    else { toast.success('Evento e lançamentos excluídos'); router.refresh() }
   }
 
   async function deleteRental(id: string) {
