@@ -109,6 +109,10 @@ export default function ProducersClient({ producers, entries, events, paidOrders
   const toEmit = filteredPeriod.filter(p => !excluded.has(p.producer.id))
   const totalToEmit = toEmit.reduce((s, p) => s + p.payable, 0)
 
+  // Resumo do período (independente da busca) para os cards do topo
+  const periodTotal = periodPayables.reduce((s, p) => s + p.payable, 0)
+  const periodEventCount = periodPayables.reduce((s, p) => s + p.eventIds.length, 0)
+
   function toggleExclude(id: string) {
     setExcluded(prev => {
       const next = new Set(prev)
@@ -178,8 +182,8 @@ export default function ProducersClient({ producers, entries, events, paidOrders
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-500">Produtores</p>
-                <p className="text-2xl font-bold text-gray-900">{producers.length}</p>
+                <p className="text-sm text-gray-500">{periodActive ? 'Produtores a pagar' : 'Produtores'}</p>
+                <p className="text-2xl font-bold text-gray-900">{periodActive ? periodPayables.length : producers.length}</p>
               </div>
               <div className="p-3 bg-blue-50 rounded-full">
                 <Users className="h-5 w-5 text-blue-600" />
@@ -191,8 +195,8 @@ export default function ProducersClient({ producers, entries, events, paidOrders
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-500">A Pagar</p>
-                <p className="text-2xl font-bold text-green-600">{formatCurrency(totalToReceive)}</p>
+                <p className="text-sm text-gray-500">{periodActive ? 'A Pagar no período' : 'A Pagar'}</p>
+                <p className="text-2xl font-bold text-green-600">{formatCurrency(periodActive ? periodTotal : totalToReceive)}</p>
               </div>
               <div className="p-3 bg-green-50 rounded-full">
                 <TrendingUp className="h-5 w-5 text-green-600" />
@@ -203,13 +207,27 @@ export default function ProducersClient({ producers, entries, events, paidOrders
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-500">Devendo</p>
-                <p className="text-2xl font-bold text-red-600">{formatCurrency(totalOwed)}</p>
-              </div>
-              <div className="p-3 bg-red-50 rounded-full">
-                <TrendingDown className="h-5 w-5 text-red-600" />
-              </div>
+              {periodActive ? (
+                <>
+                  <div>
+                    <p className="text-sm text-gray-500">Eventos pendentes</p>
+                    <p className="text-2xl font-bold text-blue-600">{periodEventCount}</p>
+                  </div>
+                  <div className="p-3 bg-blue-50 rounded-full">
+                    <CalendarClock className="h-5 w-5 text-blue-600" />
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div>
+                    <p className="text-sm text-gray-500">Devendo</p>
+                    <p className="text-2xl font-bold text-red-600">{formatCurrency(totalOwed)}</p>
+                  </div>
+                  <div className="p-3 bg-red-50 rounded-full">
+                    <TrendingDown className="h-5 w-5 text-red-600" />
+                  </div>
+                </>
+              )}
             </div>
           </CardContent>
         </Card>
