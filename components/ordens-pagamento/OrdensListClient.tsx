@@ -100,7 +100,7 @@ export default function OrdensListClient({ orders: initialOrders, producers }: P
 
   async function confirmPayment(order: PaymentOrder) {
     if (!confirm(
-      `Confirmar pagamento da ${order.order_number} — ${formatCurrency(Number(order.amount))}?\n\nEsta ação irá:\n• Liquidar ${order.event_ids.length} evento(s)\n• Criar lançamento de pagamento na conta do produtor`
+      `Confirmar pagamento da ${order.order_number} — ${formatCurrency(Number(order.amount))}?\n\nEsta ação irá:\n• Liquidar ${order.event_ids.length} evento(s)\n• Marcar a ordem como paga (o saldo do produtor é reduzido automaticamente)`
     )) return
 
     setConfirming(order.id)
@@ -113,23 +113,11 @@ export default function OrdensListClient({ orders: initialOrders, producers }: P
       if (error) { toast.error('Erro ao liquidar eventos'); setConfirming(null); return }
     }
 
-    if (Number(order.amount) > 0) {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (user) {
-        const { error } = await supabase.from('account_entries').insert({
-          producer_id: order.producer_id,
-          entry_type: 'debito',
-          category: 'pagamento',
-          description: `Pagamento ao produtor — ${order.order_number}`,
-          amount: Number(order.amount),
-          date: new Date().toISOString().split('T')[0],
-          event_id: null,
-          equipment_rental_id: null,
-          reference_month: null,
-        })
-        if (error) { toast.error('Erro ao criar lançamento de pagamento: ' + error.message); setConfirming(null); return }
-      }
-    }
+    // NÃO criar account_entries aqui: o saldo do produtor já é calculado como
+    // créditos − débitos − soma das payment_orders com status='paid' (ver
+    // ProducerStatementClient/ProducersClient). Criar um débito extra aqui
+    // descontava o valor pago DUAS VEZES, deixando o produtor erroneamente
+    // "Devendo" após o pagamento.
 
     const now = new Date().toISOString()
     const { error } = await supabase
