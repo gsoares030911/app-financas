@@ -219,10 +219,13 @@ export default function ProducerStatementClient({ producer: initialProducer, ent
   }
 
   async function deleteRental(id: string) {
-    if (!confirm('Excluir este aluguel?')) return
+    if (!confirm('Excluir este aluguel e seus lançamentos?')) return
+    // A FK equipment_rental_id é "on delete set null" — removemos os lançamentos
+    // vinculados antes para não deixar órfãos no saldo do produtor.
+    const { error: eAcc } = await supabase.from('account_entries').delete().eq('equipment_rental_id', id)
     const { error } = await supabase.from('equipment_rentals').delete().eq('id', id)
-    if (error) toast.error('Erro ao excluir')
-    else { toast.success('Aluguel excluído'); router.refresh() }
+    if (eAcc || error) toast.error('Erro ao excluir')
+    else { toast.success('Aluguel e lançamentos excluídos'); router.refresh() }
   }
 
   async function emitirOP(eventIds: string[], periodFrom?: string, periodTo?: string) {
