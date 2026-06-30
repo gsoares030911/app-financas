@@ -118,7 +118,6 @@ export default function OrdensListClient({ orders: initialOrders, producers }: P
       if (user) {
         const { error } = await supabase.from('account_entries').insert({
           producer_id: order.producer_id,
-          user_id: user.id,
           entry_type: 'debito',
           category: 'pagamento',
           description: `Pagamento ao produtor — ${order.order_number}`,
@@ -128,7 +127,7 @@ export default function OrdensListClient({ orders: initialOrders, producers }: P
           equipment_rental_id: null,
           reference_month: null,
         })
-        if (error) { toast.error('Erro ao criar lançamento de pagamento'); setConfirming(null); return }
+        if (error) { toast.error('Erro ao criar lançamento de pagamento: ' + error.message); setConfirming(null); return }
       }
     }
 

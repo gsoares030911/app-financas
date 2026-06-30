@@ -803,7 +803,7 @@ export default function ImportWizard({ initialProducers }: Props) {
 
     return (
       <div className="space-y-4">
-        <div className="grid grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <div className="bg-white rounded-xl border p-3 text-center">
             <p className="text-2xl font-bold text-blue-700">{selectedCount}</p>
             <p className="text-xs text-gray-500 mt-0.5">Eventos</p>

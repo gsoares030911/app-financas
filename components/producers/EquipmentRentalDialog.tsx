@@ -96,7 +96,7 @@ export default function EquipmentRentalDialog({ open, onOpenChange, producerId, 
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>{rental ? 'Editar Equipamento' : 'Novo Aluguel de Equipamento'}</DialogTitle>
         </DialogHeader>

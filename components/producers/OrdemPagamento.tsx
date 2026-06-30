@@ -139,36 +139,38 @@ export default function OrdemPagamento({ order, producer, events, entries }: Pro
             <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">
               Eventos ({events.length})
             </h2>
-            <table className="w-full text-sm border rounded-lg overflow-hidden">
-              <thead>
-                <tr className="bg-gray-50 border-b">
-                  <th className="px-4 py-2.5 text-left font-semibold text-gray-600">Evento</th>
-                  <th className="px-4 py-2.5 text-center font-semibold text-gray-600">Data</th>
-                  <th className="px-4 py-2.5 text-right font-semibold text-gray-600">Bruto</th>
-                  <th className="px-4 py-2.5 text-right font-semibold text-gray-600">Taxa</th>
-                  <th className="px-4 py-2.5 text-right font-semibold text-gray-600">Líquido</th>
-                  <th className="px-4 py-2.5 text-center font-semibold text-gray-600">Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {events.map(ev => (
-                  <tr key={ev.id}>
-                    <td className="px-4 py-2.5 font-medium text-gray-800">{ev.name}</td>
-                    <td className="px-4 py-2.5 text-center text-gray-500 whitespace-nowrap">{fmtDate(ev.event_date)}</td>
-                    <td className="px-4 py-2.5 text-right text-gray-700">{formatCurrency(ev.gross_revenue)}</td>
-                    <td className="px-4 py-2.5 text-right text-red-600">−{formatCurrency(ev.platform_fee)}</td>
-                    <td className="px-4 py-2.5 text-right font-semibold text-green-700">{formatCurrency(ev.net_amount)}</td>
-                    <td className="px-4 py-2.5 text-center">
-                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                        ev.status === 'pending' ? 'bg-yellow-100 text-yellow-700' : 'bg-green-100 text-green-700'
-                      }`}>
-                        {ev.status === 'pending' ? 'Pendente' : 'Liquidado'}
-                      </span>
-                    </td>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm border rounded-lg overflow-hidden min-w-[640px]">
+                <thead>
+                  <tr className="bg-gray-50 border-b">
+                    <th className="px-4 py-2.5 text-left font-semibold text-gray-600">Evento</th>
+                    <th className="px-4 py-2.5 text-center font-semibold text-gray-600">Data</th>
+                    <th className="px-4 py-2.5 text-right font-semibold text-gray-600">Bruto</th>
+                    <th className="px-4 py-2.5 text-right font-semibold text-gray-600">Taxa</th>
+                    <th className="px-4 py-2.5 text-right font-semibold text-gray-600">Líquido</th>
+                    <th className="px-4 py-2.5 text-center font-semibold text-gray-600">Status</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {events.map(ev => (
+                    <tr key={ev.id}>
+                      <td className="px-4 py-2.5 font-medium text-gray-800">{ev.name}</td>
+                      <td className="px-4 py-2.5 text-center text-gray-500 whitespace-nowrap">{fmtDate(ev.event_date)}</td>
+                      <td className="px-4 py-2.5 text-right text-gray-700">{formatCurrency(ev.gross_revenue)}</td>
+                      <td className="px-4 py-2.5 text-right text-red-600">−{formatCurrency(ev.platform_fee)}</td>
+                      <td className="px-4 py-2.5 text-right font-semibold text-green-700">{formatCurrency(ev.net_amount)}</td>
+                      <td className="px-4 py-2.5 text-center">
+                        <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                          ev.status === 'pending' ? 'bg-yellow-100 text-yellow-700' : 'bg-green-100 text-green-700'
+                        }`}>
+                          {ev.status === 'pending' ? 'Pendente' : 'Liquidado'}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
 
@@ -176,40 +178,42 @@ export default function OrdemPagamento({ order, producer, events, entries }: Pro
         {entries.length > 0 && (
           <div className="mb-6">
             <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Conta Corrente</h2>
-            <table className="w-full text-sm border rounded-lg overflow-hidden">
-              <thead>
-                <tr className="bg-gray-50 border-b">
-                  <th className="px-4 py-2.5 text-left font-semibold text-gray-600">Data</th>
-                  <th className="px-4 py-2.5 text-left font-semibold text-gray-600">Descrição</th>
-                  <th className="px-4 py-2.5 text-left font-semibold text-gray-600">Categoria</th>
-                  <th className="px-4 py-2.5 text-right font-semibold text-gray-600">Valor</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {entries.map(e => (
-                  <tr key={e.id}>
-                    <td className="px-4 py-2.5 text-gray-500 whitespace-nowrap">{fmtDate(e.date)}</td>
-                    <td className="px-4 py-2.5 text-gray-800">{e.description}</td>
-                    <td className="px-4 py-2.5 text-gray-500">{CATEGORY_LABELS[e.category] ?? e.category}</td>
-                    <td className={`px-4 py-2.5 text-right font-semibold whitespace-nowrap ${
-                      e.entry_type === 'credito' ? 'text-green-700' : 'text-red-600'
-                    }`}>
-                      {e.entry_type === 'credito' ? '+' : '−'} {formatCurrency(Number(e.amount))}
-                    </td>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm border rounded-lg overflow-hidden min-w-[560px]">
+                <thead>
+                  <tr className="bg-gray-50 border-b">
+                    <th className="px-4 py-2.5 text-left font-semibold text-gray-600">Data</th>
+                    <th className="px-4 py-2.5 text-left font-semibold text-gray-600">Descrição</th>
+                    <th className="px-4 py-2.5 text-left font-semibold text-gray-600">Categoria</th>
+                    <th className="px-4 py-2.5 text-right font-semibold text-gray-600">Valor</th>
                   </tr>
-                ))}
-              </tbody>
-              <tfoot className="border-t-2 border-gray-200 bg-gray-50 text-xs text-gray-500">
-                <tr>
-                  <td colSpan={3} className="px-4 py-2">Total créditos</td>
-                  <td className="px-4 py-2 text-right font-semibold text-green-700">+{formatCurrency(totalCredits)}</td>
-                </tr>
-                <tr>
-                  <td colSpan={3} className="px-4 py-2">Total débitos</td>
-                  <td className="px-4 py-2 text-right font-semibold text-red-600">−{formatCurrency(totalDebits)}</td>
-                </tr>
-              </tfoot>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {entries.map(e => (
+                    <tr key={e.id}>
+                      <td className="px-4 py-2.5 text-gray-500 whitespace-nowrap">{fmtDate(e.date)}</td>
+                      <td className="px-4 py-2.5 text-gray-800">{e.description}</td>
+                      <td className="px-4 py-2.5 text-gray-500">{CATEGORY_LABELS[e.category] ?? e.category}</td>
+                      <td className={`px-4 py-2.5 text-right font-semibold whitespace-nowrap ${
+                        e.entry_type === 'credito' ? 'text-green-700' : 'text-red-600'
+                      }`}>
+                        {e.entry_type === 'credito' ? '+' : '−'} {formatCurrency(Number(e.amount))}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot className="border-t-2 border-gray-200 bg-gray-50 text-xs text-gray-500">
+                  <tr>
+                    <td colSpan={3} className="px-4 py-2">Total créditos</td>
+                    <td className="px-4 py-2 text-right font-semibold text-green-700">+{formatCurrency(totalCredits)}</td>
+                  </tr>
+                  <tr>
+                    <td colSpan={3} className="px-4 py-2">Total débitos</td>
+                    <td className="px-4 py-2 text-right font-semibold text-red-600">−{formatCurrency(totalDebits)}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
           </div>
         )}
 
