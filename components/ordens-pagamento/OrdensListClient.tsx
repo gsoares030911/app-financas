@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { formatCurrency } from '@/lib/utils/format'
 import { toast } from 'sonner'
-import { Eye, CheckCircle, Loader2, FileText, Trash2, Download } from 'lucide-react'
+import { Eye, CheckCircle, Loader2, FileText, Trash2, Download, CheckCheck } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import ExportarCNABModal from './ExportarCNABModal'
 import type { PaymentOrder, Producer } from '@/lib/types'
@@ -35,6 +35,7 @@ export default function OrdensListClient({ orders: initialOrders, producers, cna
   const [orders, setOrders] = useState<PaymentOrder[]>(initialOrders)
   const [tab, setTab] = useState<TabStatus>('pending')
   const [confirming, setConfirming] = useState<string | null>(null)
+  const [confirmingBulk, setConfirmingBulk] = useState(false)
   const [deleting, setDeleting] = useState<string | null>(null)
   const [showCNAB, setShowCNAB] = useState(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -68,6 +69,56 @@ export default function OrdensListClient({ orders: initialOrders, producers, cna
   }
 
   const selectedOrders = pendingOrders.filter(o => selected.has(o.id))
+
+  async function confirmPaymentBulk() {
+    if (selectedOrders.length === 0) return
+
+    const totalAmount = selectedOrders.reduce((s, o) => s + Number(o.amount), 0)
+    const totalEvents = selectedOrders.reduce((s, o) => s + o.event_ids.length, 0)
+
+    if (!confirm(
+      `Confirmar pagamento de ${selectedOrders.length} ordem${selectedOrders.length > 1 ? 's' : ''}?\n\n` +
+      `Total: ${formatCurrency(totalAmount)}\n` +
+      `Eventos a liquidar: ${totalEvents}\n\n` +
+      `Esta ação marca todas as ordens selecionadas como pagas e liquida os eventos vinculados. É irreversível.`
+    )) return
+
+    setConfirmingBulk(true)
+
+    const allEventIds = selectedOrders.flatMap(o => o.event_ids)
+    const selectedIds = selectedOrders.map(o => o.id)
+    const now = new Date().toISOString()
+
+    if (allEventIds.length > 0) {
+      const { error } = await supabase
+        .from('events')
+        .update({ status: 'settled' })
+        .in('id', allEventIds)
+      if (error) {
+        toast.error('Erro ao liquidar eventos: ' + error.message)
+        setConfirmingBulk(false)
+        return
+      }
+    }
+
+    const { error } = await supabase
+      .from('payment_orders')
+      .update({ status: 'paid', paid_at: now })
+      .in('id', selectedIds)
+
+    setConfirmingBulk(false)
+
+    if (error) { toast.error('Erro ao confirmar ordens: ' + error.message); return }
+
+    setOrders(prev => prev.map(o =>
+      selectedIds.includes(o.id) ? { ...o, status: 'paid' as const, paid_at: now } : o
+    ))
+    setSelected(new Set())
+    toast.success(
+      `${selectedOrders.length} ordem${selectedOrders.length > 1 ? 's' : ''} confirmada${selectedOrders.length > 1 ? 's' : ''} — ${totalEvents} evento${totalEvents !== 1 ? 's' : ''} liquidado${totalEvents !== 1 ? 's' : ''}`
+    )
+    router.refresh()
+  }
 
   async function deleteOrder(order: PaymentOrder) {
     if (order.status === 'paid') { toast.error('Ordens já pagas não podem ser excluídas'); return }
@@ -178,18 +229,37 @@ export default function OrdensListClient({ orders: initialOrders, producers, cna
         </div>
 
         {tab === 'pending' && selectedOrders.length > 0 && (
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => setShowCNAB(true)}
-            className="mb-px text-xs flex items-center gap-1.5 border-blue-200 text-blue-700 hover:bg-blue-50"
-          >
-            <Download className="h-3.5 w-3.5" />
-            Exportar CNAB 240 — Itaú
-            <span className="ml-0.5 bg-blue-100 text-blue-700 font-bold rounded-full px-1.5 py-px text-xs">
-              {selectedOrders.length}
-            </span>
-          </Button>
+          <div className="flex items-center gap-2 mb-px">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setShowCNAB(true)}
+              className="text-xs flex items-center gap-1.5 border-blue-200 text-blue-700 hover:bg-blue-50"
+            >
+              <Download className="h-3.5 w-3.5" />
+              Exportar CNAB 240 — Itaú
+              <span className="ml-0.5 bg-blue-100 text-blue-700 font-bold rounded-full px-1.5 py-px text-xs">
+                {selectedOrders.length}
+              </span>
+            </Button>
+            <Button
+              size="sm"
+              onClick={confirmPaymentBulk}
+              disabled={confirmingBulk}
+              className="text-xs flex items-center gap-1.5 bg-green-600 hover:bg-green-700 text-white"
+            >
+              {confirmingBulk
+                ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                : <CheckCheck className="h-3.5 w-3.5" />
+              }
+              Confirmar Pagamentos
+              {!confirmingBulk && (
+                <span className="ml-0.5 bg-green-500 font-bold rounded-full px-1.5 py-px text-xs">
+                  {selectedOrders.length}
+                </span>
+              )}
+            </Button>
+          </div>
         )}
       </div>
 
