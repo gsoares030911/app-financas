@@ -1,5 +1,5 @@
-// Gerador CNAB 240 — Itaú (banco 341)
-// Layout FEBRABAN para TED crédito em conta (Serviço 20, Segmento A)
+// Gerador CNAB 240 — Itaú SISPAG (versão 085, outubro/2020)
+// Layout: Pagamentos a fornecedores via TED (Serviço 20, Forma 41, Segmento A)
 
 const n = (val: string | number, len: number) =>
   String(val ?? '').replace(/\D/g, '').padStart(len, '0').slice(-len)
@@ -67,22 +67,32 @@ function parseAccount(raw: string): [conta: string, digito: string] {
   return [match[1].padStart(12, '0').slice(-12), (match[2] || ' ').toUpperCase()]
 }
 
+// NOTA 11 — Agência Conta Favorecido (posições 024-043, 20 bytes)
+// Para Itaú (341/409): 0 + agência(4) + branco + 000000 + conta(6) + branco + DAC(1)
+// Para outros bancos (TED 41): agência(5) + branco + conta(12) + branco + DAC(1)
+function buildAgenciaConta(bankCode: string, ag: string, ct: string, dct: string): string {
+  if (bankCode === '341' || bankCode === '409') {
+    return '0' + ag.slice(-4) + ' ' + '000000' + ct.slice(-6) + ' ' + a(dct, 1)
+  }
+  return n(ag, 5) + ' ' + n(ct, 12) + ' ' + a(dct, 1)
+}
+
 export interface EmpresaConfig {
   cnpj: string         // "00.000.000/0001-00"
-  nome: string         // razão social (até 20 chars)
+  nome: string         // razão social (até 30 chars)
   agencia: string      // "1234" ou "1234-5"
   digitoAgencia: string
   conta: string        // "12345" ou "12345-6"
   digitoConta: string
-  convenio?: string    // opcional
 }
 
 export interface PagamentoCNAB {
   ordemNumero: string
   nomeFavorecido: string
-  banco: string         // nome ou código COMPE
-  agencia: string       // "1234" ou "1234-5"
-  conta: string         // "12345" ou "12345-6"
+  cpfCnpj?: string     // CPF ou CNPJ do favorecido (obrigatório para TED — NOTA 15)
+  banco: string        // nome ou código COMPE
+  agencia: string      // "1234" ou "1234-5"
+  conta: string        // "12345" ou "12345-6"
   valor: number
   dataPagamento: Date
 }
@@ -96,162 +106,155 @@ export function gerarCNAB240Itau(empresa: EmpresaConfig, pagamentos: PagamentoCN
   const now = new Date()
   const linhas: string[] = []
   const cnpj = empresa.cnpj.replace(/\D/g, '')
-  const [empAg, empDag] = parseAgency(empresa.agencia + (empresa.digitoAgencia ? `-${empresa.digitoAgencia}` : ''))
+  const [empAg, ] = parseAgency(empresa.agencia + (empresa.digitoAgencia ? `-${empresa.digitoAgencia}` : ''))
   const [empCt, empDct] = parseAccount(empresa.conta + (empresa.digitoConta ? `-${empresa.digitoConta}` : ''))
-  const conv = a(empresa.convenio ?? '', 20)
   const LOTE = '0001'
-  const numLote = 1
 
   // ──────────────────────────────────────────────────────────────
-  // HEADER DE ARQUIVO  (tipo 0)
+  // HEADER DE ARQUIVO  (tipo 0) — pág. 12 do layout SISPAG 085
   // ──────────────────────────────────────────────────────────────
   const hArq =
-    n('341', 3)          // 001-003  Banco
-    + n('0', 4)          // 004-007  Lote = 0000
-    + '0'                // 008      Tipo registro
-    + br(9)              // 009-017  Brancos
-    + '0'                // 018      Versão CNAB
-    + '02'               // 019-020  Tipo inscrição = CNPJ
-    + n(cnpj, 14)        // 021-034  CNPJ empresa
-    + conv               // 035-054  Convênio (20)
-    + n(empAg, 5)        // 055-059  Agência
-    + a(empDag, 1)       // 060      Dígito agência
-    + n(empCt, 12)       // 061-072  Conta
-    + a(empDct, 1)       // 073      Dígito conta
-    + br(1)              // 074      Dígito ag/conta
-    + a(empresa.nome, 20) // 075-094 Nome empresa
-    + a('BANCO ITAU SA', 40) // 095-134 Nome banco
-    + br(1)              // 135      Branco
-    + fmtDate(now)       // 136-143  Data geração (8)
-    + fmtTime(now)       // 144-149  Hora (6)
-    + n('1', 7)          // 150-156  Sequencial arquivo
-    + n('083', 3)        // 157-159  Versão layout
-    + n('1600', 5)       // 160-164  Densidade
-    + br(10)             // 165-174  Reservado banco
-    + br(40)             // 175-214  Reservado empresa
-    + br(26)             // 215-240  Brancos
+    n('341', 3)               // 001-003  Código banco
+    + n('0', 4)               // 004-007  Lote = 0000
+    + '0'                     // 008      Tipo registro
+    + br(6)                   // 009-014  Brancos
+    + '080'                   // 015-017  Versão layout arquivo
+    + '2'                     // 018      Tipo inscrição = CNPJ
+    + n(cnpj, 14)             // 019-032  CNPJ empresa
+    + br(20)                  // 033-052  Brancos
+    + n(empAg, 5)             // 053-057  Agência debitada
+    + ' '                     // 058      Branco
+    + n(empCt, 12)            // 059-070  Conta debitada
+    + ' '                     // 071      Branco
+    + a(empDct, 1)            // 072      DAC agência/conta
+    + a(empresa.nome, 30)     // 073-102  Nome empresa
+    + a('BANCO ITAU SA', 30)  // 103-132  Nome banco
+    + br(10)                  // 133-142  Brancos
+    + '1'                     // 143      Arquivo-código remessa
+    + fmtDate(now)            // 144-151  Data geração
+    + fmtTime(now)            // 152-157  Hora geração
+    + zr(9)                   // 158-166  Zeros
+    + zr(5)                   // 167-171  Densidade (zeros = teleprocessamento)
+    + br(69)                  // 172-240  Brancos
   assertLen('Header arquivo', hArq)
   linhas.push(hArq)
 
   // ──────────────────────────────────────────────────────────────
-  // HEADER DE LOTE  (tipo 1)
+  // HEADER DE LOTE  (tipo 1) — pág. 13 do layout SISPAG 085
   // ──────────────────────────────────────────────────────────────
-  const dataPgto = pagamentos[0].dataPagamento
   const hLote =
-    n('341', 3)          // 001-003  Banco
-    + n(LOTE, 4)         // 004-007  Lote
-    + '1'                // 008      Tipo registro
-    + 'C'                // 009      Operação = Crédito
-    + n('20', 2)         // 010-011  Serviço = 20 (TED)
-    + n('01', 2)         // 012-013  Forma lançamento = 01 (TED Outro Banco)
-    + n('030', 3)        // 014-016  Versão layout lote
-    + br(1)              // 017      Branco
-    + n('02', 2)         // 018-019  Tipo inscrição empresa
-    + n(cnpj, 14)        // 020-033  CNPJ empresa
-    + conv               // 034-053  Convênio (20)
-    + n(empAg, 5)        // 054-058  Agência
-    + a(empDag, 1)       // 059      Dígito agência
-    + n(empCt, 12)       // 060-071  Conta
-    + a(empDct, 1)       // 072      Dígito conta
-    + br(1)              // 073      Dígito ag/conta
-    + a(empresa.nome, 20) // 074-093 Nome empresa
-    + br(40)             // 094-133  Mensagem/histórico
-    + fmtDate(dataPgto)  // 134-141  Data pagamento (8)
-    + zr(8)              // 142-149  Data crédito (zeros)
-    + br(8)              // 150-157  Moeda (brancos)
-    + br(5)              // 158-162  Brancos
-    + n('1', 7)          // 163-169  Sequencial arquivo
-    + br(10)             // 170-179  Reservado banco
-    + br(30)             // 180-209  Histórico crédito
-    + br(20)             // 210-229  Endereço empresa
-    + zr(5)              // 230-234  Número endereço
-    + br(6)              // 235-240  Complemento
+    n('341', 3)               // 001-003  Código banco
+    + n(LOTE, 4)              // 004-007  Lote
+    + '1'                     // 008      Tipo registro
+    + 'C'                     // 009      Tipo operação = Crédito
+    + '20'                    // 010-011  Tipo pagamento = Fornecedores
+    + '41'                    // 012-013  Forma pagamento = TED outro titular
+    + '040'                   // 014-016  Versão layout lote
+    + ' '                     // 017      Branco
+    + '2'                     // 018      Tipo inscrição = CNPJ
+    + n(cnpj, 14)             // 019-032  CNPJ empresa
+    + br(4)                   // 033-036  Identificação lançamento (brancos)
+    + br(16)                  // 037-052  Brancos
+    + n(empAg, 5)             // 053-057  Agência debitada
+    + ' '                     // 058      Branco
+    + n(empCt, 12)            // 059-070  Conta debitada
+    + ' '                     // 071      Branco
+    + a(empDct, 1)            // 072      DAC agência/conta
+    + a(empresa.nome, 30)     // 073-102  Nome empresa
+    + br(30)                  // 103-132  Finalidade lote (brancos)
+    + br(10)                  // 133-142  Histórico C/C debitada
+    + br(30)                  // 143-172  Endereço empresa
+    + zr(5)                   // 173-177  Número (zeros)
+    + br(15)                  // 178-192  Complemento
+    + br(20)                  // 193-212  Cidade
+    + zr(8)                   // 213-220  CEP (zeros)
+    + br(2)                   // 221-222  Estado
+    + br(8)                   // 223-230  Brancos
+    + br(10)                  // 231-240  Ocorrências (brancos em remessa)
   assertLen('Header lote', hLote)
   linhas.push(hLote)
 
   // ──────────────────────────────────────────────────────────────
-  // SEGMENTOS A  (tipo 3, segmento A) — um por pagamento
+  // SEGMENTOS A  (tipo 3) — pág. 15 do layout SISPAG 085
   // ──────────────────────────────────────────────────────────────
   let totalValor = 0
   pagamentos.forEach((pag, idx) => {
     const bankCode = resolveBank(pag.banco)
     const [ag, dag] = parseAgency(pag.agencia)
     const [ct, dct] = parseAccount(pag.conta)
-    const docNum = pag.ordemNumero.replace(/\D/g, '').padStart(16, '0').slice(-16)
+    const agConta = buildAgenciaConta(bankCode, ag, ct, dct || dag)
+    const seuNum = a(pag.ordemNumero.replace(/\D/g, '').padStart(20, '0').slice(-20), 20)
+    const cpfCnpj = n((pag.cpfCnpj ?? '').replace(/\D/g, ''), 14)
     totalValor += pag.valor
 
     const seg =
-      n('341', 3)          // 001-003  Banco
-      + n(LOTE, 4)         // 004-007  Lote
-      + '3'                // 008      Tipo registro = detalhe
-      + n(String(idx + 1), 5) // 009-013 Sequencial no lote
-      + 'A'                // 014      Segmento A
-      + '0'                // 015      Tipo movimento = inclusão
-      + n('00', 2)         // 016-017  Código instrução
-      + n(bankCode, 3)     // 018-020  Banco do favorecido
-      + n(ag, 5)           // 021-025  Agência favorecido
-      + a(dag, 1)          // 026      Dígito agência
-      + n(ct, 12)          // 027-038  Conta favorecido
-      + a(dct, 1)          // 039      Dígito conta
-      + br(1)              // 040      Dígito ag/conta
-      + a(pag.nomeFavorecido, 20) // 041-060 Nome favorecido
-      + a(docNum, 16)      // 061-076  Nº documento empresa
-      + fmtDate(pag.dataPagamento) // 077-084 Data pagamento (8)
-      + 'BRL'              // 085-087  Tipo moeda
-      + zr(5)              // 088-092  Qtd moeda
-      + fmtValor(pag.valor, 15)  // 093-107 Valor (15)
-      + br(15)             // 108-122  Nº doc banco (brancos)
-      + zr(8)              // 123-130  Data real efetivação
-      + zr(15)             // 131-145  Valor real efetivado
-      + br(15)             // 146-160  Outras informações
-      + 'OU'               // 161-162  Complemento tipo serviço
-      + 'CC'               // 163-164  Tipo serviço = conta corrente
-      + br(10)             // 165-174  Uso FEBRABAN
-      + zr(12)             // 175-186  ISPB (zeros = TED COMPE)
-      + a('PAGAMENTO AO PRODUTOR', 23) // 187-209 Finalidade TED
-      + br(1)              // 210      Uso FEBRABAN
-      + zr(2)              // 211-212  Finalidade complementar
-      + '0'                // 213      Aviso ao favorecido
-      + zr(9)              // 214-222  CPF/CNPJ favorecido
-      + br(18)             // 223-240  Uso FEBRABAN
+      n('341', 3)               // 001-003  Código banco
+      + n(LOTE, 4)              // 004-007  Lote
+      + '3'                     // 008      Tipo registro = detalhe
+      + n(String(idx + 1), 5)   // 009-013  Nº sequencial no lote
+      + 'A'                     // 014      Segmento A
+      + '000'                   // 015-017  Tipo movimento = inclusão (NOTA 10)
+      + zr(3)                   // 018-020  Câmara (zeros = TED padrão, NOTA 35)
+      + n(bankCode, 3)          // 021-023  Código banco favorecido
+      + agConta                 // 024-043  Agência/Conta favorecido (NOTA 11)
+      + a(pag.nomeFavorecido, 30) // 044-073 Nome favorecido
+      + seuNum                  // 074-093  Seu número (nº doc empresa, 20 chars)
+      + fmtDate(pag.dataPagamento) // 094-101 Data prevista pagamento
+      + 'REA'                   // 102-104  Tipo moeda = Real
+      + zr(8)                   // 105-112  Código ISPB (zeros = TED COMPE, NOTA 35)
+      + br(2)                   // 113-114  Identificação transferência (brancos = TED)
+      + zr(5)                   // 115-119  Zeros
+      + fmtValor(pag.valor, 15) // 120-134  Valor previsto do pagamento
+      + br(15)                  // 135-149  Nosso número (brancos em remessa)
+      + br(5)                   // 150-154  Brancos (NOTA 42)
+      + zr(8)                   // 155-162  Data efetiva (zeros em remessa)
+      + zr(15)                  // 163-177  Valor efetivo (zeros em remessa)
+      + br(20)                  // 178-197  Finalidade detalhe (brancos)
+      + zr(6)                   // 198-203  Nº documento banco (zeros em remessa)
+      + cpfCnpj                 // 204-217  CPF/CNPJ favorecido (NOTA 15)
+      + br(2)                   // 218-219  Finalidade DOC e status funcionário
+      + '00005'                 // 220-224  Finalidade TED = Pagamento de Fornecedores (NOTA 26)
+      + br(5)                   // 225-229  Brancos
+      + '0'                     // 230      Aviso ao favorecido (0 = não emite)
+      + br(10)                  // 231-240  Ocorrências (brancos em remessa)
     assertLen(`Segmento A #${idx + 1}`, seg)
     linhas.push(seg)
   })
 
   const qtdDetalhes = pagamentos.length
-  const qtdRegistrosLote = 2 + qtdDetalhes // header + segmentos + trailer
+  // Trailer de lote: conta registros tipo 1 + tipo 3 + tipo 5 (NOTA 17)
+  const qtdRegistrosLote = 1 + qtdDetalhes + 1
 
   // ──────────────────────────────────────────────────────────────
-  // TRAILER DE LOTE  (tipo 5)
+  // TRAILER DE LOTE  (tipo 5) — pág. 24 do layout SISPAG 085
   // ──────────────────────────────────────────────────────────────
   const tLote =
-    n('341', 3)          // 001-003  Banco
-    + n(LOTE, 4)         // 004-007  Lote
-    + '5'                // 008      Tipo registro = trailer lote
-    + br(9)              // 009-017  Uso FEBRABAN
-    + n(String(qtdRegistrosLote + 1), 6)  // 018-023 Qtd registros lote
-    + fmtValor(totalValor, 18)   // 024-041 Somatória valores (18)
-    + zr(18)             // 042-059  Somatória qtd moeda
-    + zr(6)              // 060-065  Número aviso débito
-    + br(165)            // 066-230  Uso FEBRABAN
-    + br(10)             // 231-240  Uso FEBRABAN
+    n('341', 3)               // 001-003  Código banco
+    + n(LOTE, 4)              // 004-007  Lote
+    + '5'                     // 008      Tipo registro = trailer lote
+    + br(9)                   // 009-017  Brancos
+    + n(String(qtdRegistrosLote), 6) // 018-023 Qtd registros do lote
+    + fmtValor(totalValor, 18) // 024-041  Soma valor pagamentos (9(16)V9(2))
+    + zr(18)                  // 042-059  Zeros
+    + br(171)                 // 060-230  Brancos
+    + br(10)                  // 231-240  Ocorrências (brancos em remessa)
   assertLen('Trailer lote', tLote)
   linhas.push(tLote)
 
-  const qtdRegistrosArquivo = linhas.length + 1 // +1 para o próprio trailer arquivo
+  // +1 para o próprio trailer arquivo
+  const qtdRegistrosArquivo = linhas.length + 1
 
   // ──────────────────────────────────────────────────────────────
-  // TRAILER DE ARQUIVO  (tipo 9)
+  // TRAILER DE ARQUIVO  (tipo 9) — pág. 43 do layout SISPAG 085
   // ──────────────────────────────────────────────────────────────
   const tArq =
-    n('341', 3)          // 001-003  Banco
-    + n('9999', 4)       // 004-007  Lote = 9999
-    + '9'                // 008      Tipo registro = trailer arquivo
-    + br(9)              // 009-017  Uso FEBRABAN
-    + n(String(numLote), 6)  // 018-023 Qtd lotes
+    n('341', 3)               // 001-003  Código banco
+    + n('9999', 4)            // 004-007  Lote = 9999
+    + '9'                     // 008      Tipo registro = trailer arquivo
+    + br(9)                   // 009-017  Brancos
+    + n('1', 6)               // 018-023  Qtd lotes
     + n(String(qtdRegistrosArquivo), 6) // 024-029 Qtd registros arquivo
-    + zr(6)              // 030-035  Qtd contas
-    + br(205)            // 036-240  Uso FEBRABAN
+    + br(211)                 // 030-240  Brancos
   assertLen('Trailer arquivo', tArq)
   linhas.push(tArq)
 
