@@ -223,11 +223,11 @@ export const SYSTEM_CATEGORIES: Omit<Category, 'id' | 'user_id' | 'created_at'>[
 export const CATEGORY_LABELS: Record<string, string> = Object.fromEntries(
   SYSTEM_CATEGORIES.map(c => [c.slug, c.name])
 )
-export const CREDIT_CATEGORIES: string[] = ['venda_evento', 'bonificacao', 'outros']
+export const CREDIT_CATEGORIES: string[] = ['bonificacao', 'outros', 'venda_evento']
 export const DEBIT_CATEGORIES: string[] = [
-  'adiantamento', 'anuncio', 'emprestimo', 'aluguel_equipamento', 'pagamento',
-  'taxa_conveniencia', 'taxa_cartao_pix', 'taxa_dinheiro', 'taxa_servico',
-  'taxa_administrativa', 'taxa_impressao', 'voucher', 'juros_emprestimo', 'outros',
+  'adiantamento', 'aluguel_equipamento', 'anuncio', 'emprestimo', 'juros_emprestimo',
+  'outros', 'pagamento', 'taxa_administrativa', 'taxa_cartao_pix', 'taxa_conveniencia',
+  'taxa_servico', 'taxa_impressao', 'taxa_dinheiro', 'voucher',
 ]
 
 export type UserRole =
