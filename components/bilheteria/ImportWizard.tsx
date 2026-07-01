@@ -40,6 +40,7 @@ interface EventGroup {
   beOtherProfits: number
   beCardFee: number
   beTaxes: number
+  qtdIngressos: number
   pix: string
   phone: string
   email: string
@@ -135,6 +136,16 @@ function findMatch(name: string, producers: Producer[]): Producer | null {
   )
 }
 
+function findMatchByEmail(email: string, producers: Producer[]): Producer | null {
+  if (!email) return null
+  const e = email.toLowerCase().trim()
+  return producers.find(p => p.email?.toLowerCase().trim() === e) ?? null
+}
+
+function isHillarius(name: string): boolean {
+  return name.toLowerCase().includes('hillarius')
+}
+
 function parseAPIResponse(entries: BilheteriaEntry[]): {
   groups: EventGroup[]
   cancelled: number
@@ -148,8 +159,10 @@ function parseAPIResponse(entries: BilheteriaEntry[]): {
 
   for (const entry of entries) {
     const show     = (entry.espetaculo ?? '').trim()
-    const producer = (entry.produtor   ?? '').trim()
     const dateStr  = (entry.fechamento ?? '').split('T')[0]
+    // Se o produtor vier vazio no endpoint, usa o email como identificador temporário
+    const rawProducer = (entry.produtor ?? '').trim()
+    const producer = rawProducer || ((entry.email ?? '').trim() ? `[sem nome] ${(entry.email ?? '').trim()}` : '')
 
     if (!show || !producer || !dateStr) continue
 
@@ -217,6 +230,8 @@ function parseAPIResponse(entries: BilheteriaEntry[]): {
     const bonus         = entry.bv                  ?? 0
     const beTaxes       = entry.ecad                ?? 0
 
+    const qtdIngressos = entry.qtdIngressos ?? 0
+
     const existing = map.get(key)
     if (existing) {
       existing.totalSales     = r2(existing.totalSales     + totalSales)
@@ -236,6 +251,7 @@ function parseAPIResponse(entries: BilheteriaEntry[]): {
       existing.otherExpenses = r2(existing.otherExpenses + otherExpenses)
       existing.bonus         = r2(existing.bonus         + bonus)
       existing.beTaxes       = r2(existing.beTaxes       + beTaxes)
+      existing.qtdIngressos  = existing.qtdIngressos + qtdIngressos
       if (!existing.pix   && entry.pix)    existing.pix   = entry.pix
       if (!existing.phone && entry.celular) existing.phone = entry.celular
       if (!existing.email && entry.email)  existing.email = entry.email
@@ -247,6 +263,7 @@ function parseAPIResponse(entries: BilheteriaEntry[]): {
         totalSales, totalCardSales, cashSales, voucherSales, feeCardPix, feeCash, feeService, feeAdmin, feePrinting,
         voucher, advertising, loan, loanInterest, otherExpenses, bonus,
         beGrossProfit, beOtherProfits: 0, beCardFee: 0, beTaxes,
+        qtdIngressos,
         pix: entry.pix ?? '', phone: entry.celular ?? '', email: entry.email ?? '',
         selected: true,
       })
@@ -330,8 +347,10 @@ export default function ImportWizard({ initialProducers }: Props) {
 
       const uniqueNames = [...new Set(groups.map(g => g.producerName))]
       const maps: ProducerMap[] = uniqueNames.map(name => {
-        const match = findMatch(name, initialProducers)
         const g = groups.find(x => x.producerName === name)!
+        // Tenta por nome primeiro; se falhar, tenta por email
+        const match = findMatch(name, initialProducers)
+          ?? findMatchByEmail(g.email, initialProducers)
         return {
           nameInFile: name,
           pix:   g.pix,
@@ -506,13 +525,18 @@ export default function ImportWizard({ initialProducers }: Props) {
           eventId = existingEventId
           result.duplicates++
         } else {
+          const missingName = evt.producerName.startsWith('[sem nome]')
+          const sessionNote = evt.session ? `Sessão: ${evt.session}` : null
+          const nameNote    = missingName ? `Atenção: nome do produtor não identificado no endpoint (email: ${evt.email}). Verifique e corrija.` : null
+          const notes = [sessionNote, nameNote].filter(Boolean).join(' | ') || null
+
           const { data: newEvent, error: evtErr } = await supabase.from('events').insert({
             producer_id:   producerId,
             name:          evt.show,
             event_date:    evt.dateStr,
             gross_revenue: gross, platform_fee: platFee, net_amount: net,
             status: 'pending',
-            notes: evt.session ? `Sessão: ${evt.session}` : null,
+            notes,
           }).select().single()
           if (evtErr) throw evtErr
           eventId = newEvent.id
@@ -640,6 +664,23 @@ export default function ImportWizard({ initialProducers }: Props) {
             description: `Impostos BE — ${evt.show}`, amount: beTaxCost, date: evt.dateStr,
           })
           if (eTax) throw eTax
+        }
+
+        // Taxa de emissão Hillarius: R$0,50 × total de ingressos (apenas para clientes Hillarius)
+        if (isHillarius(evt.producerName) && evt.qtdIngressos > 0) {
+          const taxaHillarius = r2(evt.qtdIngressos * 0.50)
+          await supabase.from('account_entries').insert({
+            producer_id: producerId, event_id: eventId,
+            entry_type: 'debito', category: 'taxa_conveniencia',
+            description: `Taxa de emissão bilheteria (${evt.qtdIngressos} ingressos × R$0,50) — ${evt.show}`,
+            amount: taxaHillarius, date: evt.dateStr,
+          })
+          await supabase.from('platform_entries').insert({
+            user_id: user.id, event_id: eventId, producer_id: producerId,
+            entry_type: 'receita', category: 'servicos',
+            description: `Taxa de emissão bilheteria Hillarius — ${evt.show}`,
+            amount: taxaHillarius, date: evt.dateStr,
+          })
         }
 
       } catch (err: unknown) {

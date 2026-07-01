@@ -54,7 +54,6 @@ export default async function BilheteriaPage() {
   const { data: importHistory } = await supabase
     .from('bilheteria_api_imports')
     .select('id, dt_inicial, dt_final, imported_at, total_registros')
-    .eq('user_id', user.id)
     .order('dt_inicial', { ascending: false })
 
   const allEntries: PlatformEntry[] = []
@@ -64,7 +63,6 @@ export default async function BilheteriaPage() {
     const { data } = await supabase
       .from('platform_entries')
       .select('*')
-      .eq('user_id', user.id)
       .order('date', { ascending: false })
       .range(from, from + pageSize - 1)
     if (!data || data.length === 0) break

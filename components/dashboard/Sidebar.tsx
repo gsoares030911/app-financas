@@ -12,10 +12,17 @@ import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
 import type { User } from '@supabase/supabase-js'
 import type { UserRole } from '@/lib/types'
-import { isAdmin, isSuperAdmin } from '@/lib/utils/auth'
+import { isAdmin, isSuperAdmin, canAccessBilheteria } from '@/lib/utils/auth'
 import { cn } from '@/lib/utils'
 
 const ADMIN_NAV = [
+  { href: '/dashboard/rankings',         label: 'Dashboard',           icon: Trophy },
+  { href: '/dashboard/producers',        label: 'Produtores',          icon: Users },
+  { href: '/dashboard/ordens-pagamento', label: 'Ordens de Pagamento', icon: FileText },
+  { href: '/dashboard/bilheteria',       label: 'Bilheteria Express',  icon: Ticket },
+]
+
+const FIN_BILHETERIA_NAV = [
   { href: '/dashboard/rankings',         label: 'Dashboard',           icon: Trophy },
   { href: '/dashboard/producers',        label: 'Produtores',          icon: Users },
   { href: '/dashboard/ordens-pagamento', label: 'Ordens de Pagamento', icon: FileText },
@@ -41,7 +48,9 @@ export default function Sidebar({ user, role }: Props) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
 
-  const navItems = isAdmin(role) ? ADMIN_NAV : PRODUCER_NAV
+  const navItems = isAdmin(role) ? ADMIN_NAV
+    : role === 'financeiro_bilheteria' ? FIN_BILHETERIA_NAV
+    : PRODUCER_NAV
   const superAdmin = isSuperAdmin(role)
 
   // Submenu de Configurações fica aberto quando qualquer sub-rota está ativa

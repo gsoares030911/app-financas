@@ -12,7 +12,6 @@ export default async function OrdensPagamentoPage() {
     supabase
       .from('payment_orders')
       .select('*')
-      .eq('user_id', user.id)
       .order('created_at', { ascending: false }),
     supabase
       .from('producers')
