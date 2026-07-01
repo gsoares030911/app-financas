@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 
-export async function proxy(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
@@ -31,18 +31,15 @@ export async function proxy(request: NextRequest) {
     const { data } = await supabase.auth.getUser()
     user = data.user
   } catch {
-    // Falha silenciosa
+    // Falha silenciosa — Next.js tratará normalmente
   }
 
   const { pathname } = request.nextUrl
 
-  // Redireciona não-autenticados que tentam acessar o dashboard
   if (!user && pathname.startsWith('/dashboard')) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
-  // Redireciona autenticados que acessam login/register/raiz
-  // /reset-password é permitido mesmo autenticado (usuário pode estar trocando senha)
   if (user && (pathname === '/login' || pathname === '/register' || pathname === '/')) {
     return NextResponse.redirect(new URL('/dashboard/rankings', request.url))
   }

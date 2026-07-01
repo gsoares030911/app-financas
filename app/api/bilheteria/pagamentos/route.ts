@@ -15,6 +15,12 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Datas obrigatórias' }, { status: 400 })
   }
 
+  // Valida formato de data (DD/MM/YYYY ou YYYY-MM-DD) para evitar injeção de parâmetros
+  const DATE_RE = /^(\d{2}\/\d{2}\/\d{4}|\d{4}-\d{2}-\d{2})$/
+  if (!DATE_RE.test(dtInicial) || !DATE_RE.test(dtFinal)) {
+    return NextResponse.json({ error: 'Formato de data inválido' }, { status: 400 })
+  }
+
   const token = process.env.BILHETERIA_API_TOKEN
   if (!token) {
     return NextResponse.json({ error: 'Token de API não configurado no servidor' }, { status: 500 })
