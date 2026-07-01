@@ -4,11 +4,11 @@ import { useState } from 'react'
 import { Download, X, AlertCircle, Building2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { gerarCNAB240Itau, resolveBank, type EmpresaConfig, type PagamentoCNAB } from '@/lib/utils/cnab240'
+import { gerarCNAB240Itau, resolveBank, detectPixKeyType, type EmpresaConfig, type PagamentoCNAB } from '@/lib/utils/cnab240'
 import { toast } from 'sonner'
 import type { PaymentOrder, Producer } from '@/lib/types'
 
-type ProducerBankInfo = Pick<Producer, 'id' | 'full_name' | 'bank_name' | 'bank_agency' | 'bank_account'>
+type ProducerBankInfo = Pick<Producer, 'id' | 'full_name' | 'bank_name' | 'bank_agency' | 'bank_account' | 'pix_key'>
 
 interface Props {
   orders: PaymentOrder[]
@@ -61,11 +61,14 @@ export default function ExportarCNABModal({ orders, producers, onClose }: Props)
     orders.forEach(order => {
       const prod = producerMap.get(order.producer_id)
       if (!prod) { e.push(`Produtor não encontrado para OP ${order.order_number}`); return }
-      if (!prod.bank_agency) e.push(`${prod.full_name}: agência bancária não cadastrada`)
-      if (!prod.bank_account) e.push(`${prod.full_name}: conta bancária não cadastrada`)
-      if (!prod.bank_name) e.push(`${prod.full_name}: banco não cadastrado`)
-      else if (resolveBank(prod.bank_name) === '000')
-        e.push(`${prod.full_name}: banco "${prod.bank_name}" não reconhecido — verifique o nome`)
+      const hasPix = !!prod.pix_key?.trim()
+      if (!hasPix) {
+        if (!prod.bank_agency)  e.push(`${prod.full_name}: agência bancária não cadastrada (sem chave PIX)`)
+        if (!prod.bank_account) e.push(`${prod.full_name}: conta bancária não cadastrada (sem chave PIX)`)
+        if (!prod.bank_name)    e.push(`${prod.full_name}: banco não cadastrado (sem chave PIX)`)
+        else if (resolveBank(prod.bank_name) === '000')
+          e.push(`${prod.full_name}: banco "${prod.bank_name}" não reconhecido — verifique o nome`)
+      }
     })
     return e
   }
@@ -87,13 +90,14 @@ export default function ExportarCNABModal({ orders, producers, onClose }: Props)
     const pagamentos: PagamentoCNAB[] = orders.map(order => {
       const prod = producerMap.get(order.producer_id)!
       return {
-        ordemNumero: order.order_number,
+        ordemNumero:    order.order_number,
         nomeFavorecido: prod.full_name,
-        banco: prod.bank_name ?? '',
-        agencia: prod.bank_agency ?? '',
-        conta: prod.bank_account ?? '',
-        valor: Number(order.amount),
-        dataPagamento: new Date(dataPgto + 'T12:00:00'),
+        banco:          prod.bank_name ?? '',
+        agencia:        prod.bank_agency ?? '',
+        conta:          prod.bank_account ?? '',
+        pixKey:         prod.pix_key ?? undefined,
+        valor:          Number(order.amount),
+        dataPagamento:  new Date(dataPgto + 'T12:00:00'),
       }
     })
 
@@ -190,14 +194,42 @@ export default function ExportarCNABModal({ orders, producers, onClose }: Props)
             <p className="text-xs text-gray-400 mt-1">Próximo dia útil sugerido automaticamente</p>
           </div>
 
+          {/* Resumo PIX / TED */}
+          {(() => {
+            const nPix = orders.filter(o => !!producerMap.get(o.producer_id)?.pix_key?.trim()).length
+            const nTed = orders.length - nPix
+            if (nPix === 0 || nTed === 0) return null
+            return (
+              <div className="flex gap-2 text-xs">
+                <span className="bg-green-50 text-green-700 border border-green-200 rounded px-2 py-1 font-medium">
+                  {nPix} via PIX
+                </span>
+                <span className="bg-blue-50 text-blue-700 border border-blue-200 rounded px-2 py-1 font-medium">
+                  {nTed} via TED
+                </span>
+                <span className="text-gray-400 self-center">— lotes separados no arquivo</span>
+              </div>
+            )
+          })()}
+
           {/* Lista de pagamentos */}
           <div className="bg-gray-50 rounded-lg border divide-y max-h-40 overflow-y-auto">
             {orders.map(order => {
               const prod = producerMap.get(order.producer_id)
+              const isPix = !!prod?.pix_key?.trim()
+              const keyType = isPix ? detectPixKeyType(prod!.pix_key!) : null
+              const keyLabel: Record<string, string> = { '01': 'tel', '02': 'email', '03': 'cpf/cnpj', '04': 'aleat.' }
               return (
                 <div key={order.id} className="flex items-center justify-between px-3 py-2 text-xs">
                   <span className="font-mono text-blue-700 font-semibold">{order.order_number}</span>
                   <span className="text-gray-600 truncate mx-2 flex-1">{prod?.full_name ?? '—'}</span>
+                  {isPix ? (
+                    <span className="text-green-600 font-medium mr-2 whitespace-nowrap">
+                      PIX {keyLabel[keyType!] ?? ''}
+                    </span>
+                  ) : (
+                    <span className="text-blue-600 font-medium mr-2">TED</span>
+                  )}
                   <span className="font-semibold text-gray-800 whitespace-nowrap">
                     {Number(order.amount).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                   </span>

@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button'
 import ExportarCNABModal from './ExportarCNABModal'
 import type { PaymentOrder, Producer } from '@/lib/types'
 
-type ProducerBankInfo = Pick<Producer, 'id' | 'full_name' | 'bank_name' | 'bank_agency' | 'bank_account'>
+type ProducerBankInfo = Pick<Producer, 'id' | 'full_name' | 'bank_name' | 'bank_agency' | 'bank_account' | 'pix_key'>
 
 interface Props {
   orders: PaymentOrder[]
