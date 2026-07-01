@@ -1,10 +1,11 @@
 'use client'
 
-import { useState } from 'react'
-import { Download, X, AlertCircle, Building2 } from 'lucide-react'
+import { useState, useTransition } from 'react'
+import { Download, X, AlertCircle, Building2, Save } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { gerarCNAB240Itau, resolveBank, detectPixKeyType, type EmpresaConfig, type PagamentoCNAB } from '@/lib/utils/cnab240'
+import { saveCnabConfig } from '@/app/actions/cnabConfig'
 import { toast } from 'sonner'
 import type { PaymentOrder, Producer } from '@/lib/types'
 
@@ -13,20 +14,8 @@ type ProducerBankInfo = Pick<Producer, 'id' | 'full_name' | 'bank_name' | 'bank_
 interface Props {
   orders: PaymentOrder[]
   producers: ProducerBankInfo[]
+  cnabConfig?: Partial<EmpresaConfig>
   onClose: () => void
-}
-
-const STORAGE_KEY = 'cnab_empresa_config'
-
-function loadConfig(): Partial<EmpresaConfig> {
-  try {
-    const s = localStorage.getItem(STORAGE_KEY)
-    return s ? JSON.parse(s) : {}
-  } catch { return {} }
-}
-
-function saveConfig(cfg: EmpresaConfig) {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(cfg)) } catch { /* noop */ }
 }
 
 function nextBusinessDay(): string {
@@ -36,41 +25,62 @@ function nextBusinessDay(): string {
   return d.toISOString().split('T')[0]
 }
 
-export default function ExportarCNABModal({ orders, producers, onClose }: Props) {
-  const saved = loadConfig()
-  const [cnpj,         setCnpj]         = useState(saved.cnpj ?? '')
-  const [nome,         setNome]         = useState(saved.nome ?? '')
-  const [agencia,      setAgencia]      = useState(saved.agencia ?? '')
-  const [digitoAg,     setDigitoAg]     = useState(saved.digitoAgencia ?? '')
-  const [conta,        setConta]        = useState(saved.conta ?? '')
-  const [digitoCt,     setDigitoCt]     = useState(saved.digitoConta ?? '')
-  const [dataPgto,     setDataPgto]     = useState(nextBusinessDay())
-  const [erros,        setErros]        = useState<string[]>([])
+export default function ExportarCNABModal({ orders, producers, cnabConfig, onClose }: Props) {
+  const [cnpj,     setCnpj]     = useState(cnabConfig?.cnpj         ?? '')
+  const [nome,     setNome]     = useState(cnabConfig?.nome         ?? '')
+  const [agencia,  setAgencia]  = useState(cnabConfig?.agencia      ?? '')
+  const [digitoAg, setDigitoAg] = useState(cnabConfig?.digitoAgencia ?? '')
+  const [conta,    setConta]    = useState(cnabConfig?.conta        ?? '')
+  const [digitoCt, setDigitoCt] = useState(cnabConfig?.digitoConta  ?? '')
+  const [dataPgto, setDataPgto] = useState(nextBusinessDay())
+  const [erros,    setErros]    = useState<string[]>([])
+  const [saving,   startSave]   = useTransition()
 
   const producerMap = new Map(producers.map(p => [p.id, p]))
 
-  // Valida dados antes de gerar
+  function buildEmpresa(): EmpresaConfig {
+    return {
+      cnpj,
+      nome:          nome.trim(),
+      agencia:       agencia.replace(/\D/g, ''),
+      digitoAgencia: digitoAg.trim(),
+      conta:         conta.replace(/\D/g, ''),
+      digitoConta:   digitoCt.trim(),
+    }
+  }
+
   function validar(): string[] {
     const e: string[] = []
-    if (!cnpj.replace(/\D/g,'') || cnpj.replace(/\D/g,'').length < 14) e.push('CNPJ da empresa inválido')
-    if (!nome.trim()) e.push('Razão social obrigatória')
-    if (!agencia.replace(/\D/g,'')) e.push('Agência obrigatória')
-    if (!conta.replace(/\D/g,'')) e.push('Conta obrigatória')
-    if (!dataPgto) e.push('Data de pagamento obrigatória')
+    if (!cnpj.replace(/\D/g, '') || cnpj.replace(/\D/g, '').length < 14) e.push('CNPJ da empresa inválido')
+    if (!nome.trim())              e.push('Razão social obrigatória')
+    if (!agencia.replace(/\D/g, '')) e.push('Agência obrigatória')
+    if (!conta.replace(/\D/g, ''))   e.push('Conta obrigatória')
+    if (!dataPgto)                 e.push('Data de pagamento obrigatória')
 
     orders.forEach(order => {
       const prod = producerMap.get(order.producer_id)
       if (!prod) { e.push(`Produtor não encontrado para OP ${order.order_number}`); return }
       const hasPix = !!prod.pix_key?.trim()
       if (!hasPix) {
-        if (!prod.bank_agency)  e.push(`${prod.full_name}: agência bancária não cadastrada (sem chave PIX)`)
-        if (!prod.bank_account) e.push(`${prod.full_name}: conta bancária não cadastrada (sem chave PIX)`)
+        if (!prod.bank_agency)  e.push(`${prod.full_name}: agência não cadastrada (sem chave PIX)`)
+        if (!prod.bank_account) e.push(`${prod.full_name}: conta não cadastrada (sem chave PIX)`)
         if (!prod.bank_name)    e.push(`${prod.full_name}: banco não cadastrado (sem chave PIX)`)
         else if (resolveBank(prod.bank_name) === '000')
-          e.push(`${prod.full_name}: banco "${prod.bank_name}" não reconhecido — verifique o nome`)
+          e.push(`${prod.full_name}: banco "${prod.bank_name}" não reconhecido`)
       }
     })
     return e
+  }
+
+  function handleSalvar() {
+    const e = validar()
+    setErros(e)
+    if (e.length > 0) return
+    startSave(async () => {
+      const result = await saveCnabConfig(buildEmpresa())
+      if (result.error) toast.error('Erro ao salvar: ' + result.error)
+      else toast.success('Dados da empresa salvos com sucesso')
+    })
   }
 
   function gerar() {
@@ -78,21 +88,17 @@ export default function ExportarCNABModal({ orders, producers, onClose }: Props)
     setErros(e)
     if (e.length > 0) return
 
-    const empresa: EmpresaConfig = {
-      cnpj, nome: nome.trim(),
-      agencia: agencia.replace(/\D/g, ''),
-      digitoAgencia: digitoAg.trim(),
-      conta: conta.replace(/\D/g, ''),
-      digitoConta: digitoCt.trim(),
-    }
-    saveConfig(empresa)
+    const empresa = buildEmpresa()
+
+    // Salva silenciosamente ao gerar
+    startSave(async () => { await saveCnabConfig(empresa) })
 
     const pagamentos: PagamentoCNAB[] = orders.map(order => {
       const prod = producerMap.get(order.producer_id)!
       return {
         ordemNumero:    order.order_number,
         nomeFavorecido: prod.full_name,
-        banco:          prod.bank_name ?? '',
+        banco:          prod.bank_name   ?? '',
         agencia:        prod.bank_agency ?? '',
         conta:          prod.bank_account ?? '',
         pixKey:         prod.pix_key ?? undefined,
@@ -118,9 +124,14 @@ export default function ExportarCNABModal({ orders, producers, onClose }: Props)
     }
   }
 
+  const nPix = orders.filter(o => !!producerMap.get(o.producer_id)?.pix_key?.trim()).length
+  const nTed = orders.length - nPix
+  const keyLabel: Record<string, string> = { '01': 'tel', '02': 'email', '03': 'cpf/cnpj', '04': 'aleat.' }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg">
+
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b">
           <div className="flex items-center gap-2.5">
@@ -138,10 +149,11 @@ export default function ExportarCNABModal({ orders, producers, onClose }: Props)
         </div>
 
         <div className="px-6 py-5 space-y-5">
+
           {/* Dados da empresa pagadora */}
           <div>
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
-              Dados da sua empresa (pagadora)
+              Dados da empresa pagadora
             </p>
             <div className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
@@ -181,6 +193,17 @@ export default function ExportarCNABModal({ orders, producers, onClose }: Props)
                     placeholder="6" className="h-8 text-sm" maxLength={1} />
                 </div>
               </div>
+              <div className="flex justify-end">
+                <Button
+                  variant="outline" size="sm"
+                  onClick={handleSalvar}
+                  disabled={saving}
+                  className="text-xs h-7 gap-1.5"
+                >
+                  <Save className="h-3 w-3" />
+                  {saving ? 'Salvando…' : 'Salvar dados da empresa'}
+                </Button>
+              </div>
             </div>
           </div>
 
@@ -195,41 +218,32 @@ export default function ExportarCNABModal({ orders, producers, onClose }: Props)
           </div>
 
           {/* Resumo PIX / TED */}
-          {(() => {
-            const nPix = orders.filter(o => !!producerMap.get(o.producer_id)?.pix_key?.trim()).length
-            const nTed = orders.length - nPix
-            if (nPix === 0 || nTed === 0) return null
-            return (
-              <div className="flex gap-2 text-xs">
-                <span className="bg-green-50 text-green-700 border border-green-200 rounded px-2 py-1 font-medium">
-                  {nPix} via PIX
-                </span>
-                <span className="bg-blue-50 text-blue-700 border border-blue-200 rounded px-2 py-1 font-medium">
-                  {nTed} via TED
-                </span>
-                <span className="text-gray-400 self-center">— lotes separados no arquivo</span>
-              </div>
-            )
-          })()}
+          {nPix > 0 && nTed > 0 && (
+            <div className="flex gap-2 text-xs">
+              <span className="bg-green-50 text-green-700 border border-green-200 rounded px-2 py-1 font-medium">
+                {nPix} via PIX
+              </span>
+              <span className="bg-blue-50 text-blue-700 border border-blue-200 rounded px-2 py-1 font-medium">
+                {nTed} via TED
+              </span>
+              <span className="text-gray-400 self-center">— lotes separados no arquivo</span>
+            </div>
+          )}
 
           {/* Lista de pagamentos */}
           <div className="bg-gray-50 rounded-lg border divide-y max-h-40 overflow-y-auto">
             {orders.map(order => {
-              const prod = producerMap.get(order.producer_id)
-              const isPix = !!prod?.pix_key?.trim()
-              const keyType = isPix ? detectPixKeyType(prod!.pix_key!) : null
-              const keyLabel: Record<string, string> = { '01': 'tel', '02': 'email', '03': 'cpf/cnpj', '04': 'aleat.' }
+              const prod   = producerMap.get(order.producer_id)
+              const isPix  = !!prod?.pix_key?.trim()
+              const kType  = isPix ? detectPixKeyType(prod!.pix_key!) : null
               return (
                 <div key={order.id} className="flex items-center justify-between px-3 py-2 text-xs">
                   <span className="font-mono text-blue-700 font-semibold">{order.order_number}</span>
                   <span className="text-gray-600 truncate mx-2 flex-1">{prod?.full_name ?? '—'}</span>
-                  {isPix ? (
-                    <span className="text-green-600 font-medium mr-2 whitespace-nowrap">
-                      PIX {keyLabel[keyType!] ?? ''}
-                    </span>
-                  ) : (
-                    <span className="text-blue-600 font-medium mr-2">TED</span>
-                  )}
+                  {isPix
+                    ? <span className="text-green-600 font-medium mr-2 whitespace-nowrap">PIX {kType ? keyLabel[kType] : ''}</span>
+                    : <span className="text-blue-600 font-medium mr-2">TED</span>
+                  }
                   <span className="font-semibold text-gray-800 whitespace-nowrap">
                     {Number(order.amount).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                   </span>

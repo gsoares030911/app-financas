@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import OrdensListClient from '@/components/ordens-pagamento/OrdensListClient'
+import { getCnabConfig } from '@/app/actions/cnabConfig'
 import type { PaymentOrder, Producer } from '@/lib/types'
 
 export default async function OrdensPagamentoPage() {
@@ -8,7 +9,7 @@ export default async function OrdensPagamentoPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const [{ data: orders }, { data: producers }] = await Promise.all([
+  const [{ data: orders }, { data: producers }, cnabConfig] = await Promise.all([
     supabase
       .from('payment_orders')
       .select('*')
@@ -17,6 +18,7 @@ export default async function OrdensPagamentoPage() {
       .from('producers')
       .select('id, full_name, bank_name, bank_agency, bank_account, pix_key')
       .order('full_name'),
+    getCnabConfig(),
   ])
 
   return (
@@ -30,6 +32,7 @@ export default async function OrdensPagamentoPage() {
       <OrdensListClient
         orders={(orders ?? []) as PaymentOrder[]}
         producers={(producers ?? []) as Pick<Producer, 'id' | 'full_name' | 'bank_name' | 'bank_agency' | 'bank_account' | 'pix_key'>[]}
+        cnabConfig={cnabConfig}
       />
     </div>
   )
