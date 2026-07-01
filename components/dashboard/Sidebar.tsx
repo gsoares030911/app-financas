@@ -64,16 +64,20 @@ export default function Sidebar({ user, role }: Props) {
   }
 
   function NavLink({ href, label, icon: Icon }: { href: string; label: string; icon: React.ElementType }) {
+    const active = isActive(href)
     return (
       <Link
         href={href}
         onClick={() => setOpen(false)}
         className={cn(
-          'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
-          isActive(href) ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-100'
+          'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors relative',
+          active ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-100'
         )}
       >
-        <Icon className="h-4 w-4" />
+        {active && (
+          <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 bg-blue-600 rounded-full" />
+        )}
+        <Icon className={cn('h-4 w-4', active ? 'text-blue-600' : 'text-gray-400')} />
         {label}
       </Link>
     )
@@ -163,6 +167,12 @@ export default function Sidebar({ user, role }: Props) {
             <div className="flex items-center gap-1.5 px-3 mb-2">
               <ShieldCheck className="h-3.5 w-3.5 text-purple-600" />
               <span className="text-xs text-purple-600 font-semibold">Super Admin</span>
+            </div>
+          )}
+          {role === 'admin' && !superAdmin && (
+            <div className="flex items-center gap-1.5 px-3 mb-2">
+              <ShieldCheck className="h-3.5 w-3.5 text-blue-500" />
+              <span className="text-xs text-blue-600 font-semibold">Admin</span>
             </div>
           )}
           {role === 'producer' && (

@@ -165,7 +165,9 @@ export default function RankingsClient({ producers, entries, events, cancelledEv
                 <p className="text-xs text-gray-500">Produtores</p>
                 <p className="text-2xl font-bold text-gray-900 mt-0.5">{producers.length}</p>
               </div>
-              <Users className="h-5 w-5 text-blue-400" />
+              <div className="p-2.5 bg-blue-50 rounded-xl shrink-0">
+                <Users className="h-5 w-5 text-blue-600" />
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -176,7 +178,9 @@ export default function RankingsClient({ producers, entries, events, cancelledEv
                 <p className="text-xs text-gray-500">Receita Total</p>
                 <p className="text-xl font-bold text-green-600 mt-0.5">{formatCurrency(globalTotalRevenue)}</p>
               </div>
-              <TrendingUp className="h-5 w-5 text-green-400" />
+              <div className="p-2.5 bg-green-50 rounded-xl shrink-0">
+                <TrendingUp className="h-5 w-5 text-green-600" />
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -187,7 +191,9 @@ export default function RankingsClient({ producers, entries, events, cancelledEv
                 <p className="text-xs text-gray-500">A Pagar</p>
                 <p className="text-xl font-bold text-blue-600 mt-0.5">{formatCurrency(globalToPay)}</p>
               </div>
-              <Trophy className="h-5 w-5 text-blue-400" />
+              <div className="p-2.5 bg-indigo-50 rounded-xl shrink-0">
+                <Trophy className="h-5 w-5 text-indigo-600" />
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -198,7 +204,9 @@ export default function RankingsClient({ producers, entries, events, cancelledEv
                 <p className="text-xs text-gray-500">Total Devendo</p>
                 <p className="text-xl font-bold text-red-600 mt-0.5">{formatCurrency(globalOwed)}</p>
               </div>
-              <TrendingDown className="h-5 w-5 text-red-400" />
+              <div className="p-2.5 bg-red-50 rounded-xl shrink-0">
+                <TrendingDown className="h-5 w-5 text-red-600" />
+              </div>
             </div>
           </CardContent>
         </Card>

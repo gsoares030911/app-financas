@@ -7,7 +7,6 @@ import { Plus, Search, Users, TrendingUp, TrendingDown, ChevronRight, FileText, 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
 import DateRangePicker from '@/components/shared/DateRangePicker'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
@@ -357,18 +356,14 @@ export default function ProducersClient({ producers, entries, events, paidOrders
                       <ChevronRight className="h-4 w-4 text-gray-400 shrink-0 mt-0.5" />
                     </div>
                     <div className="mt-4 pt-4 border-t flex items-center justify-between">
-                      <span className="text-xs text-gray-400">Saldo</span>
-                      <div className="flex items-center gap-2">
-                        <span className={`text-sm font-bold ${balance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                          {formatCurrency(Math.abs(balance))}
-                        </span>
-                        <Badge
-                          variant={balance >= 0 ? 'default' : 'destructive'}
-                          className="text-xs"
-                        >
-                          {balance >= 0 ? 'A pagar' : 'Devendo'}
-                        </Badge>
-                      </div>
+                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                        balance >= 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                      }`}>
+                        {balance >= 0 ? 'A pagar' : 'Devendo'}
+                      </span>
+                      <span className={`text-sm font-bold ${balance >= 0 ? 'text-green-700' : 'text-red-600'}`}>
+                        {formatCurrency(Math.abs(balance))}
+                      </span>
                     </div>
                   </CardContent>
                 </Card>

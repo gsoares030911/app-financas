@@ -322,12 +322,17 @@ export default function ProducerStatementClient({ producer: initialProducer, ent
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-3">
         <Link href="/dashboard/producers">
           <Button variant="ghost" size="icon">
             <ArrowLeft className="h-4 w-4" />
           </Button>
         </Link>
+        <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center shrink-0 select-none">
+          <span className="text-blue-700 font-bold text-sm">
+            {producer.full_name.split(' ').filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join('')}
+          </span>
+        </div>
         <div className="flex-1 min-w-0">
           <h1 className="text-2xl font-bold text-gray-900 truncate">{producer.full_name}</h1>
           <p className="text-sm text-gray-500">Conta Corrente</p>
