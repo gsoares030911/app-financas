@@ -516,10 +516,15 @@ export default function ImportWizard({ initialProducers }: Props) {
       }
 
       try {
+        // Para Hillarius: feeService é substituído pela taxa R$0,50/ingresso (lançada abaixo)
+        const effectiveFeeService = isHillarius(evt.producerName) ? 0 : evt.feeService
+
         const gross   = Math.max(0, evt.totalSales)
-        const debits  = evtTotalDebits(evt)
+        const debits  = r2(evt.feeCardPix + evt.feeCash + effectiveFeeService + evt.feeAdmin + evt.feePrinting
+          + evt.voucher + evt.cashSales + evt.voucherSales
+          + evt.advertising + evt.loan + evt.loanInterest + evt.otherExpenses)
         const net     = Math.max(0, r2(gross - debits + evt.bonus))
-        const platFee = r2(evt.feeService + evt.feeAdmin + evt.feePrinting)
+        const platFee = r2(effectiveFeeService + evt.feeAdmin + evt.feePrinting)
 
         let eventId: string
 
@@ -572,7 +577,7 @@ export default function ImportWizard({ initialProducers }: Props) {
         const debEntries = [
           { category: 'taxa_cartao_pix',     description: `Taxa Cartão/PIX — ${evt.show}`,        amount: evt.feeCardPix },
           { category: 'taxa_dinheiro',       description: `Taxa Vendas Dinheiro — ${evt.show}`,    amount: evt.feeCash },
-          { category: 'taxa_servico',        description: `Taxa de Serviço — ${evt.show}`,         amount: evt.feeService },
+          { category: 'taxa_servico',        description: `Taxa de Serviço — ${evt.show}`,         amount: effectiveFeeService },
           { category: 'taxa_administrativa', description: `Taxa Administrativa — ${evt.show}`,     amount: evt.feeAdmin },
           { category: 'taxa_impressao',      description: `Taxa Impressão/Envio — ${evt.show}`,    amount: evt.feePrinting },
           { category: 'voucher',             description: `Vendas Dinheiro/Voucher (recebidas na bilheteria) — ${evt.show}`, amount: r2(evt.cashSales + evt.voucherSales) },
@@ -629,7 +634,7 @@ export default function ImportWizard({ initialProducers }: Props) {
           })
         }
         // Bilheteria Express — outras receitas (taxas operacionais cobradas do produtor)
-        const beRevenue = r2(evt.feeCardPix + evt.feeCash + evt.feeService + evt.feeAdmin + evt.feePrinting)
+        const beRevenue = r2(evt.feeCardPix + evt.feeCash + effectiveFeeService + evt.feeAdmin + evt.feePrinting)
         if (beRevenue > 0) {
           await supabase.from('platform_entries').insert({
             user_id: user.id, event_id: eventId, producer_id: producerId,
