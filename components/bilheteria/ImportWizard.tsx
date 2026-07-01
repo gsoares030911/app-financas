@@ -403,15 +403,23 @@ export default function ImportWizard({ initialProducers }: Props) {
 
     const allProducerIds = [...producerIdMap.values()]
 
-    // ── 2. Carregar eventos existentes ──────────────────────────────────
+    // ── 2. Carregar eventos existentes (paginado para evitar truncamento em >1000 linhas) ──
     const existingKeys = new Map<string, string>()
     if (allProducerIds.length > 0) {
-      const { data: existing } = await supabase
-        .from('events')
-        .select('id, producer_id, name, event_date')
-        .in('producer_id', allProducerIds)
-      for (const e of existing ?? []) {
-        existingKeys.set(`${e.producer_id}|${e.name}|${e.event_date}`, e.id)
+      let from = 0
+      const pageSize = 1000
+      while (true) {
+        const { data: existing } = await supabase
+          .from('events')
+          .select('id, producer_id, name, event_date')
+          .in('producer_id', allProducerIds)
+          .range(from, from + pageSize - 1)
+        if (!existing || existing.length === 0) break
+        for (const e of existing) {
+          existingKeys.set(`${e.producer_id}|${e.name}|${e.event_date}`, e.id)
+        }
+        if (existing.length < pageSize) break
+        from += pageSize
       }
     }
 
