@@ -449,11 +449,11 @@ export default function ProducerStatementClient({ producer: initialProducer, ent
               )}
             </div>
 
-            {salesChartData.length > 1 && (
+            {salesChartData.length > 0 && (
               <div className="mt-4 pt-4 border-t border-gray-100">
                 <p className="text-xs text-gray-400 mb-2">Evolução de vendas {dateRange?.from ? '— período selecionado' : '— acumulado'}</p>
                 <ResponsiveContainer width="100%" height={100}>
-                  <AreaChart data={salesChartData} margin={{ top: 2, right: 4, left: 0, bottom: 0 }}>
+                  <AreaChart data={salesChartData.length === 1 ? [salesChartData[0], salesChartData[0]] : salesChartData} margin={{ top: 2, right: 4, left: 0, bottom: 0 }}>
                     <defs>
                       <linearGradient id="salesGrad" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="5%" stopColor="#22c55e" stopOpacity={0.25} />
