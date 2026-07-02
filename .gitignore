@@ -42,6 +42,9 @@ yarn-error.log*
 # claude code (configurações locais)
 .claude/
 
+# documentação interna (não versionar)
+TECHNICAL.md
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
