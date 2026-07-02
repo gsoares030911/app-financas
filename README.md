@@ -25,9 +25,15 @@ Sistema de gestão financeira da plataforma Bilheteria Express, desenvolvido com
 
 ### Ordens de Pagamento
 - Lista de OPs pendentes e pagas com filtros e totalizadores
-- Confirmação de pagamento: liquida eventos vinculados e reduz saldo do produtor
+- **Confirmação de pagamento individual** por linha: liquida eventos vinculados e reduz saldo do produtor
+- **Confirmação em massa**: selecione N ordens e confirme todas de uma vez via batch update
 - Exclusão de OP pendente: reverte eventos para Pendente
-- Exportação **CNAB 240 Itaú** (`.rem`) para múltiplas OPs selecionadas
+- **Exportação CNAB 240 Itaú** (`.rem`) para múltiplas OPs selecionadas
+  - Layout oficial SISPAG versão 085 (outubro/2020)
+  - Suporte a **PIX** (lote forma `45`, Segmento A + B) e **TED** (lote forma `41`) no mesmo arquivo
+  - PIX tem prioridade: produtores com chave PIX cadastrada usam lote PIX; demais usam TED
+  - Detecção automática do tipo de chave PIX (CPF/CNPJ, e-mail, telefone, aleatória)
+  - Config da empresa pagadora salva no Supabase (compartilhada entre usuários/máquinas)
 - Documento imprimível por OP com dados do produtor, eventos e conta corrente
 
 ### Bilheteria Express (P&L da Plataforma)
@@ -51,7 +57,8 @@ Sistema de gestão financeira da plataforma Bilheteria Express, desenvolvido com
 
 ### Acesso Compartilhado
 - Todos os usuários autenticados veem os mesmos dados (RLS compartilhado)
-- Papéis: `super_admin`, `admin`, `producer`
+- Papéis: `super_admin`, `admin`, `financeiro_bilheteria`, `producer`, `financeiro_produtor`
+  - `financeiro_bilheteria`: acesso a Dashboard, Produtores, OPs e Bilheteria (sem Configurações/Logs)
 
 ## Segurança
 - Middleware Next.js (`middleware.ts`) protege todas as rotas `/dashboard` e redireciona usuários não autenticados
