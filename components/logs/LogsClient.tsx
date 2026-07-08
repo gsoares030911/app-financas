@@ -103,7 +103,7 @@ export default function LogsClient({ logs }: { logs: AuditLog[] }) {
   const [dateRange, setDateRange]     = useState<DateRange | undefined>(undefined)
   const [expanded, setExpanded]       = useState<Set<string>>(new Set())
   const [page, setPage]               = useState(0)
-  const [groupByUser, setGroupByUser] = useState(false)
+  const [groupByUser, setGroupByUser] = useState(true)
   const [collapsedUsers, setCollapsedUsers] = useState<Set<string>>(new Set())
   const PAGE_SIZE = 50
 
