@@ -60,6 +60,7 @@ interface ImportResult {
   created: number
   skipped: number
   duplicates: number
+  protected: number
   errors: string[]
   cancelledDebited: number
   collectionsApplied: number
@@ -384,7 +385,7 @@ export default function ImportWizard({ initialProducers }: Props) {
     if (!user) { toast.error('Não autenticado'); setStep('preview'); return }
 
     const result: ImportResult = {
-      created: 0, skipped: 0, duplicates: 0, errors: [],
+      created: 0, skipped: 0, duplicates: 0, protected: 0, errors: [],
       cancelledDebited: 0, collectionsApplied: 0, collectionsAmount: 0,
     }
 
@@ -435,6 +436,18 @@ export default function ImportWizard({ initialProducers }: Props) {
         }
         if (existing.length < pageSize) break
         from += pageSize
+      }
+    }
+
+    // ── 2b. Eventos já cobertos por OPs — protegidos contra reimport ────
+    const protectedEventIds = new Set<string>()
+    if (allProducerIds.length > 0) {
+      const { data: orders } = await supabase
+        .from('payment_orders')
+        .select('event_ids')
+        .in('producer_id', allProducerIds)
+      for (const o of orders ?? []) {
+        for (const id of (o.event_ids ?? [])) protectedEventIds.add(id)
       }
     }
 
@@ -525,6 +538,11 @@ export default function ImportWizard({ initialProducers }: Props) {
 
       const dupKey        = `${producerId}|${evt.show}|${evt.dateStr}`
       const existingEventId = existingKeys.get(dupKey)
+
+      // Evento já coberto por uma OP — nunca atualizar para evitar duplo pagamento
+      if (existingEventId && protectedEventIds.has(existingEventId)) {
+        result.protected++; done++; setProgress(Math.round((done / selected.length) * 100)); continue
+      }
 
       if (existingEventId && duplicateMode === 'skip') {
         result.duplicates++; done++; setProgress(Math.round((done / selected.length) * 100)); continue
@@ -1063,7 +1081,13 @@ export default function ImportWizard({ initialProducers }: Props) {
           {result.created} criado{result.created !== 1 ? 's' : ''}
           {result.duplicates > 0 && ` · ${result.duplicates} ${duplicateMode === 'update' ? 'atualizado' : 'ignorado'}${result.duplicates !== 1 ? 's' : ''}`}
           {result.skipped > 0 && ` · ${result.skipped} com erro`}
+          {result.protected > 0 && ` · ${result.protected} protegido${result.protected !== 1 ? 's' : ''} (OP gerada)`}
         </p>
+        {result.protected > 0 && (
+          <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-md text-xs text-amber-800">
+            ⚠️ {result.protected} evento{result.protected !== 1 ? 's' : ''} ignorado{result.protected !== 1 ? 's' : ''} pois já possuem Ordem de Pagamento gerada. Para evitar duplo pagamento, esses eventos não foram alterados.
+          </div>
+        )}
         {(result.cancelledDebited > 0 || result.collectionsApplied > 0) && (
           <div className="mt-3 space-y-1 text-xs text-gray-500">
             {result.cancelledDebited > 0 && (
