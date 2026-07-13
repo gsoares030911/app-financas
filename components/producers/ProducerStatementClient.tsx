@@ -58,6 +58,7 @@ export default function ProducerStatementClient({ producer: initialProducer, ent
   const [editEntry, setEditEntry] = useState<AccountEntry | null>(null)
   const [editEvent, setEditEvent] = useState<ProducerEvent | null>(null)
   const [editRental, setEditRental] = useState<EquipmentRental | null>(null)
+  const [generatingCharges, setGeneratingCharges] = useState(false)
   const [filterType, setFilterType] = useState('all')
   const [filterCategory, setFilterCategory] = useState('all')
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined)
@@ -225,6 +226,60 @@ export default function ProducerStatementClient({ producer: initialProducer, ent
     const { error } = await supabase.from('events').delete().eq('id', id)
     if (eAcc || ePlat || error) toast.error('Erro ao excluir')
     else { toast.success('Evento e lançamentos excluídos'); router.refresh() }
+  }
+
+  async function gerarCobrancasMes() {
+    const activeRentals = rentals.filter(r => r.is_active)
+    if (activeRentals.length === 0) { toast.error('Nenhum equipamento ativo cadastrado'); return }
+
+    const now = new Date()
+    const year = now.getFullYear()
+    const month = now.getMonth() + 1
+    const refMonth = `${year}-${String(month).padStart(2, '0')}`
+    const monthLabel = now.toLocaleString('pt-BR', { month: 'long', year: 'numeric' })
+
+    const rentalIds = activeRentals.map(r => r.id)
+    const { data: existing } = await supabase
+      .from('account_entries')
+      .select('equipment_rental_id')
+      .in('equipment_rental_id', rentalIds)
+      .eq('reference_month', refMonth)
+
+    const alreadyBilled = new Set((existing ?? []).map(e => e.equipment_rental_id))
+    const toGenerate = activeRentals.filter(r => !alreadyBilled.has(r.id))
+
+    if (toGenerate.length === 0) {
+      toast.info(`Todas as cobranças de ${monthLabel} já foram geradas`)
+      return
+    }
+
+    if (!confirm(`Gerar ${toGenerate.length} cobrança(s) de aluguel para ${monthLabel}?`)) return
+
+    setGeneratingCharges(true)
+    try {
+      const daysInMonth = new Date(year, month, 0).getDate()
+      const entriesToInsert = toGenerate.map(r => {
+        const day = String(Math.min(r.billing_day, daysInMonth)).padStart(2, '0')
+        return {
+          producer_id: producer.id,
+          equipment_rental_id: r.id,
+          entry_type: 'debito' as const,
+          category: 'aluguel_equipamento' as const,
+          description: `Aluguel — ${r.equipment_name} (${monthLabel})`,
+          amount: r.monthly_amount,
+          date: `${refMonth}-${day}`,
+          reference_month: refMonth,
+        }
+      })
+      const { error } = await supabase.from('account_entries').insert(entriesToInsert)
+      if (error) throw error
+      toast.success(`${toGenerate.length} cobrança(s) gerada(s) para ${monthLabel}!`)
+      router.refresh()
+    } catch (err: unknown) {
+      toast.error((err as Error).message ?? 'Erro ao gerar cobranças')
+    } finally {
+      setGeneratingCharges(false)
+    }
   }
 
   async function deleteRental(id: string) {
@@ -745,7 +800,14 @@ export default function ProducerStatementClient({ producer: initialProducer, ent
 
         {/* ── Equipamentos ── */}
         <TabsContent value="equipamentos" className="space-y-4 mt-4">
-          <div className="flex justify-end">
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="outline"
+              onClick={gerarCobrancasMes}
+              disabled={generatingCharges}
+            >
+              {generatingCharges ? 'Gerando...' : 'Gerar cobranças do mês'}
+            </Button>
             <Button onClick={() => { setEditRental(null); setRentalOpen(true) }}>
               <Plus className="h-4 w-4 mr-2" />
               Novo Equipamento
