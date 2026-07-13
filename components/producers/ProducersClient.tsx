@@ -72,13 +72,17 @@ export default function ProducersClient({ producers, entries, events, paidOrders
   const totalToReceive = producersWithBalance.filter(p => p.balance > 0).reduce((s, p) => s + p.balance, 0)
   const totalOwed = producersWithBalance.filter(p => p.balance < 0).reduce((s, p) => s + Math.abs(p.balance), 0)
 
+  function ymd(d: Date): string {
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+  }
+
   // ───── Visão por período (emissão de OP em lote) ─────
   // Só eventos PENDENTES com data no período, somando saldo (créditos − débitos) dos
   // lançamentos vinculados — mesma regra do botão "Emitir OP" da tela do produtor.
   const periodPayables = useMemo((): PeriodPayable[] => {
     if (!periodActive) return []
-    const from = dateRange!.from!
-    const to = dateRange!.to ?? from
+    const fromStr = ymd(dateRange!.from!)
+    const toStr = dateRange!.to ? ymd(dateRange!.to) : fromStr
     return producers
       .map(producer => {
         const eventIds = events
@@ -86,8 +90,7 @@ export default function ProducersClient({ producers, entries, events, paidOrders
             if (ev.producer_id !== producer.id || ev.status !== 'pending') return false
             if (emittedSet.has(ev.id)) return false // já está em uma OP existente
             const dateKey = ev.billing_from ?? ev.event_date
-            const d = new Date(dateKey + 'T12:00:00')
-            return d >= from && d <= to
+            return dateKey >= fromStr && dateKey <= toStr
           })
           .map(ev => ev.id)
         if (eventIds.length === 0) return { producer, eventIds, payable: 0 }
