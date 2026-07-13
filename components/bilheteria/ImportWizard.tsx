@@ -531,6 +531,8 @@ export default function ImportWizard({ initialProducers }: Props) {
         if (existingEventId) {
           const { error: updErr } = await supabase.from('events').update({
             gross_revenue: gross, platform_fee: platFee, net_amount: net, status: 'pending',
+            billing_from: dtInicial,
+            billing_to:   dtFinal,
           }).eq('id', existingEventId)
           if (updErr) throw updErr
           await supabase.from('account_entries').delete().eq('event_id', existingEventId)
@@ -550,6 +552,8 @@ export default function ImportWizard({ initialProducers }: Props) {
             gross_revenue: gross, platform_fee: platFee, net_amount: net,
             status: 'pending',
             notes,
+            billing_from: dtInicial,
+            billing_to:   dtFinal,
           }).select().single()
           if (evtErr) throw evtErr
           eventId = newEvent.id

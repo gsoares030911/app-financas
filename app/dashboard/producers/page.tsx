@@ -30,7 +30,7 @@ export default async function ProducersPage() {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     fetchAll(supabase, 'producers', '*', (q: any) => q.order('full_name')),
     fetchAll(supabase, 'account_entries', 'producer_id, event_id, entry_type, amount'),
-    fetchAll(supabase, 'events', 'id, producer_id, event_date, status'),
+    fetchAll(supabase, 'events', 'id, producer_id, event_date, billing_from, status'),
     fetchAll(supabase, 'payment_orders', 'producer_id, amount, status, event_ids'),
   ])
 

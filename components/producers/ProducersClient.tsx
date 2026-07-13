@@ -29,7 +29,7 @@ interface PeriodPayable {
 interface Props {
   producers: Producer[]
   entries: Pick<AccountEntry, 'producer_id' | 'event_id' | 'entry_type' | 'amount'>[]
-  events: { id: string; producer_id: string; event_date: string; status: string }[]
+  events: { id: string; producer_id: string; event_date: string; billing_from: string | null; status: string }[]
   paidOrders: { producer_id: string; amount: number }[]
   emittedEventIds: string[]
   userId: string
@@ -85,7 +85,8 @@ export default function ProducersClient({ producers, entries, events, paidOrders
           .filter(ev => {
             if (ev.producer_id !== producer.id || ev.status !== 'pending') return false
             if (emittedSet.has(ev.id)) return false // já está em uma OP existente
-            const d = new Date(ev.event_date + 'T12:00:00')
+            const dateKey = ev.billing_from ?? ev.event_date
+            const d = new Date(dateKey + 'T12:00:00')
             return d >= from && d <= to
           })
           .map(ev => ev.id)
