@@ -28,6 +28,7 @@ const EMPTY: ProducerFormData = {
   bank_agency: '',
   bank_account: '',
   notes: '',
+  service_fee_pct: '',
 }
 
 export default function ProducerForm({ open, onOpenChange, producer, onUpdate }: Props) {
@@ -47,6 +48,7 @@ export default function ProducerForm({ open, onOpenChange, producer, onUpdate }:
         bank_agency: producer.bank_agency ?? '',
         bank_account: producer.bank_account ?? '',
         notes: producer.notes ?? '',
+        service_fee_pct: producer.service_fee_pct != null ? String(producer.service_fee_pct) : '',
       })
     } else {
       setForm(EMPTY)
@@ -62,6 +64,7 @@ export default function ProducerForm({ open, onOpenChange, producer, onUpdate }:
     if (!form.full_name.trim()) { toast.error('Nome completo é obrigatório'); return }
     setLoading(true)
     try {
+      const pct = parseFloat(form.service_fee_pct)
       const payload = {
         full_name: form.full_name.trim(),
         email: form.email.trim() || null,
@@ -71,6 +74,7 @@ export default function ProducerForm({ open, onOpenChange, producer, onUpdate }:
         bank_agency: form.bank_agency.trim() || null,
         bank_account: form.bank_account.trim() || null,
         notes: form.notes.trim() || null,
+        service_fee_pct: !isNaN(pct) && pct > 0 ? pct : null,
       }
       if (producer) {
         const { data: updated, error } = await supabase
@@ -167,6 +171,23 @@ export default function ProducerForm({ open, onOpenChange, producer, onUpdate }:
                 placeholder="Conta"
               />
             </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="service_fee_pct">Taxa de Serviço Contratual (%)</Label>
+            <Input
+              id="service_fee_pct"
+              type="number"
+              min="0"
+              max="100"
+              step="0.01"
+              value={form.service_fee_pct}
+              onChange={e => set('service_fee_pct', e.target.value)}
+              placeholder="Ex: 7 (deixe em branco para usar o valor da API)"
+            />
+            <p className="text-xs text-gray-400">
+              Quando preenchido, o import usa este % sobre o bruto em vez do feeService da API.
+            </p>
           </div>
 
           <div className="space-y-2">

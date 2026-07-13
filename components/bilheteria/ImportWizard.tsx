@@ -403,6 +403,16 @@ export default function ImportWizard({ initialProducers }: Props) {
 
     const allProducerIds = [...producerIdMap.values()]
 
+    // ── 1b. Carregar taxa de serviço contratual de cada produtor ──────────
+    const serviceFeeMap = new Map<string, number | null>()
+    if (allProducerIds.length > 0) {
+      const { data: prodData } = await supabase
+        .from('producers')
+        .select('id, service_fee_pct')
+        .in('id', allProducerIds)
+      for (const p of prodData ?? []) serviceFeeMap.set(p.id, p.service_fee_pct ?? null)
+    }
+
     // ── 2. Carregar eventos existentes (paginado para evitar truncamento em >1000 linhas) ──
     const existingKeys = new Map<string, string>()
     if (allProducerIds.length > 0) {
@@ -516,10 +526,17 @@ export default function ImportWizard({ initialProducers }: Props) {
       }
 
       try {
-        // Para Hillarius: feeService é substituído pela taxa R$0,50/ingresso (lançada abaixo)
-        const effectiveFeeService = isHillarius(evt.producerName) ? 0 : evt.feeService
-
         const gross   = Math.max(0, evt.totalSales)
+
+        // Hillarius: sem feeService (cobrado como taxa R$0,50/ingresso abaixo)
+        // Produtor com taxa contratual (%): usa gross × pct em vez do feeService da API
+        // Demais: usa o feeService retornado pela API
+        const contractPct = serviceFeeMap.get(producerId) ?? null
+        const effectiveFeeService = isHillarius(evt.producerName)
+          ? 0
+          : contractPct != null
+            ? r2(gross * contractPct / 100)
+            : evt.feeService
         const debits  = r2(evt.feeCardPix + evt.feeCash + effectiveFeeService + evt.feeAdmin + evt.feePrinting
           + evt.voucher + evt.cashSales + evt.voucherSales
           + evt.advertising + evt.loan + evt.loanInterest + evt.otherExpenses)

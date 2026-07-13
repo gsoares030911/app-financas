@@ -80,6 +80,7 @@ export interface Producer {
   bank_agency: string | null
   bank_account: string | null
   notes: string | null
+  service_fee_pct: number | null
   created_at: string
 }
 
@@ -92,6 +93,7 @@ export interface ProducerFormData {
   bank_agency: string
   bank_account: string
   notes: string
+  service_fee_pct: string
 }
 
 export type EventStatus = 'pending' | 'settled'
