@@ -12,15 +12,17 @@ Sistema de gestão financeira da plataforma Bilheteria Express, desenvolvido com
 
 ### Produtores Culturais
 - Cadastro completo com dados bancários (banco, agência, conta, PIX), e-mail e telefone
+- **Taxa de serviço contratual (`service_fee_pct`)**: quando preenchida no cadastro, o import usa `bruto × %` em vez do `feeService` da API (ex: produtor que absorve 7%)
 - Conta corrente por produtor: créditos, débitos, saldo acumulado
 - Gráfico de evolução de vendas
-- Filtro por período (DateRangePicker) com lançamentos filtrados
+- Filtro por período via `billing_from` dos eventos (não `event_date`) — garante que shows importados fora do período apareçam corretamente
 - Avatar com iniciais para identificação visual
 - **Emissão de Ordens de Pagamento (OP)** individuais e em lote por período
   - Anti-duplicidade: eventos já cobertos por uma OP existente são excluídos automaticamente
   - Numeração sequencial por ano (`OP-2026-001`)
 - Eventos por produtor com status Pendente / Liquidado
-- Aluguéis de equipamentos com cobrança mensal automática
+- **Aluguéis de equipamentos**: cadastro de contratos com dia de cobrança, início/fim e status
+  - Botão **"Gerar cobranças do mês"**: cria débito `aluguel_equipamento` para cada contrato ativo não cobrado no mês; anti-duplicata por `reference_month`
 - Lançamentos manuais com categorias customizáveis
 
 ### Ordens de Pagamento
