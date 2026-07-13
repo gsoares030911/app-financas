@@ -101,6 +101,7 @@ export interface ProducerEvent {
   producer_id: string
   name: string
   event_date: string
+  billing_from: string | null
   gross_revenue: number
   platform_fee: number
   net_amount: number

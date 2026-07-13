@@ -88,13 +88,15 @@ export default function ProducerStatementClient({ producer: initialProducer, ent
     setEquipSort(prev => prev.col === col ? { col, dir: prev.dir === 'asc' ? 'desc' : 'asc' } : { col, dir: 'asc' })
   }
 
+  function ymd(d: Date): string {
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+  }
+
   const cardEntries = useMemo(() => {
     if (!dateRange?.from) return entries
-    return entries.filter(e => {
-      const d = new Date(e.date + 'T12:00:00')
-      if (dateRange.to) return d >= dateRange.from! && d <= dateRange.to
-      return d >= dateRange.from!
-    })
+    const fromStr = ymd(dateRange.from)
+    const toStr = dateRange.to ? ymd(dateRange.to) : null
+    return entries.filter(e => e.date >= fromStr && (!toStr || e.date <= toStr))
   }, [entries, dateRange])
 
   const totalCredits = cardEntries.filter(e => e.entry_type === 'credito').reduce((s, e) => s + e.amount, 0)
@@ -138,9 +140,9 @@ export default function ProducerStatementClient({ producer: initialProducer, ent
         if (filterType !== 'all' && e.entry_type !== filterType) return false
         if (filterCategory !== 'all' && e.category !== filterCategory) return false
         if (dateRange?.from) {
-          const d = new Date(e.date + 'T12:00:00')
-          if (dateRange.to) { if (!(d >= dateRange.from && d <= dateRange.to)) return false }
-          else { if (d < dateRange.from) return false }
+          const fromStr = ymd(dateRange.from)
+          const toStr = dateRange.to ? ymd(dateRange.to) : null
+          if (e.date < fromStr || (toStr && e.date > toStr)) return false
         }
         return true
       })
@@ -175,9 +177,10 @@ export default function ProducerStatementClient({ producer: initialProducer, ent
     return [...events]
       .filter(ev => {
         if (!dateRange?.from) return true
-        const d = new Date(ev.event_date + 'T12:00:00')
-        if (dateRange.to) return d >= dateRange.from && d <= dateRange.to
-        return d >= dateRange.from
+        const dateKey = ev.billing_from ?? ev.event_date
+        const fromStr = ymd(dateRange.from)
+        const toStr = dateRange.to ? ymd(dateRange.to) : null
+        return dateKey >= fromStr && (!toStr || dateKey <= toStr)
       })
       .sort((a, b) => {
         const { col, dir } = eventSort
@@ -357,9 +360,10 @@ export default function ProducerStatementClient({ producer: initialProducer, ent
                   const pendingIds = events
                     .filter(ev => ev.status === 'pending' && (() => {
                       if (!dateRange?.from) return true
-                      const d = new Date(ev.event_date + 'T12:00:00')
-                      if (dateRange.to) return d >= dateRange.from && d <= dateRange.to
-                      return d >= dateRange.from
+                      const dateKey = ev.billing_from ?? ev.event_date
+                      const fromStr = ymd(dateRange.from)
+                      const toStr = dateRange.to ? ymd(dateRange.to) : null
+                      return dateKey >= fromStr && (!toStr || dateKey <= toStr)
                     })())
                     .map(ev => ev.id)
                   emitirOP(
