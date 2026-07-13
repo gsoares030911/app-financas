@@ -345,12 +345,17 @@ export default function ImportWizard({ initialProducers }: Props) {
       setCancelledBESums(cancelledBE)
       setCancelledWithValues(cancelledWithValues)
 
+      // Busca produtores frescos do banco a cada consulta para evitar
+      // lista desatualizada quando o usuário importa mais de uma vez na mesma sessão.
+      const { data: freshData } = await supabase.from('producers').select('*').order('full_name')
+      const freshProducers: Producer[] = (freshData ?? []) as Producer[]
+
       const uniqueNames = [...new Set(groups.map(g => g.producerName))]
       const maps: ProducerMap[] = uniqueNames.map(name => {
         const g = groups.find(x => x.producerName === name)!
         // Tenta por nome primeiro; se falhar, tenta por email
-        const match = findMatch(name, initialProducers)
-          ?? findMatchByEmail(g.email, initialProducers)
+        const match = findMatch(name, freshProducers)
+          ?? findMatchByEmail(g.email, freshProducers)
         return {
           nameInFile: name,
           pix:   g.pix,

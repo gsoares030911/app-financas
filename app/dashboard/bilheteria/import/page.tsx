@@ -11,7 +11,6 @@ export default async function ImportPage() {
   const { data: producers } = await supabase
     .from('producers')
     .select('*')
-    .eq('user_id', user.id)
     .order('full_name')
 
   return (
