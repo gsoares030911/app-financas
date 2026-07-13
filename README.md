@@ -40,6 +40,8 @@ Sistema de gestão financeira da plataforma Bilheteria Express, desenvolvido com
 
 ### Bilheteria Express (P&L da Plataforma)
 - Importação de dados via API externa por período com histórico de importações (chips clicáveis)
+- **Proteção anti duplo pagamento**: eventos já vinculados a uma OP (pendente ou paga) são ignorados na reimportação — valores e status não são alterados; resultado exibe aviso amarelo com contagem
+- **Anti-duplicata de produtores**: a cada "Buscar", lista de produtores é consultada ao vivo no banco (nunca usa cache da página)
 - Regras financeiras completas: cartão, dinheiro, voucher, BV, impressão, ECAD
   - Dinheiro/Voucher: ficam no bruto do produtor, saem do líquido (não entram no caixa BE)
   - Taxa de cartão (~2%): só em bilheteria física (TEATRO/PDV), não no online
