@@ -7,6 +7,7 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { CurrencyInput } from '@/components/ui/currency-input'
 import { Label } from '@/components/ui/label'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
@@ -249,11 +250,10 @@ export default function EquipmentRentalDialog({ open, onOpenChange, producerId, 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
                 <Label>Valor Mensal (R$) *</Label>
-                <Input
-                  type="number" min="0.01" step="0.01"
+                <CurrencyInput
                   value={form.monthly_amount}
-                  onChange={e => set('monthly_amount', e.target.value)}
-                  placeholder="0,00" required
+                  onValueChange={raw => set('monthly_amount', raw)}
+                  required
                 />
               </div>
               <div className="space-y-2">

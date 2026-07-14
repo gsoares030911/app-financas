@@ -7,6 +7,7 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { CurrencyInput } from '@/components/ui/currency-input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { createClient } from '@/lib/supabase/client'
@@ -266,11 +267,9 @@ export default function EventDialog({ open, onOpenChange, producerId, event }: P
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label className="text-sm">Bruto (R$)</Label>
-                <Input
-                  type="number" min="0" step="0.01"
+                <CurrencyInput
                   value={form.gross_revenue || ''}
-                  onChange={e => set('gross_revenue', Number(e.target.value))}
-                  placeholder="0,00"
+                  onValueChange={raw => set('gross_revenue', Number(raw) || 0)}
                 />
               </div>
               <div className="space-y-1.5">
@@ -287,30 +286,20 @@ export default function EventDialog({ open, onOpenChange, producerId, event }: P
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label className="text-sm">Taxa (R$)</Label>
-                <Input
-                  type="number" min="0" step="0.01"
+                <CurrencyInput
                   value={form.platform_fee || ''}
-                  onChange={e => set('platform_fee', Number(e.target.value))}
-                  placeholder="0,00"
+                  onValueChange={raw => set('platform_fee', Number(raw) || 0)}
                   className="text-red-600"
                 />
               </div>
               <div className="space-y-1.5">
                 <Label className="text-sm">Líquido (R$)</Label>
-                <div className="relative">
-                  <Input
-                    type="number" min="0" step="0.01"
-                    value={form.net_amount || ''}
-                    onChange={e => set('net_amount', Number(e.target.value))}
-                    placeholder="0,00"
-                    className="font-semibold text-green-700 pr-14"
-                  />
-                  {pctDisplay && (
-                    <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-gray-400 pointer-events-none">
-                      {pctDisplay}%
-                    </span>
-                  )}
-                </div>
+                <CurrencyInput
+                  value={form.net_amount || ''}
+                  onValueChange={raw => set('net_amount', Number(raw) || 0)}
+                  className="font-semibold text-green-700"
+                  suffix={pctDisplay ? `${pctDisplay}%` : undefined}
+                />
               </div>
             </div>
 

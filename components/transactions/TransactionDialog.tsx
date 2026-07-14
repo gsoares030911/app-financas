@@ -7,6 +7,7 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { CurrencyInput } from '@/components/ui/currency-input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Loader2 } from 'lucide-react'
@@ -114,14 +115,9 @@ export default function TransactionDialog({ open, onOpenChange, onSave, editingT
           {/* Amount */}
           <div className="space-y-1.5">
             <Label htmlFor="amount">Valor (R$)</Label>
-            <Input
-              id="amount"
-              type="number"
-              step="0.01"
-              min="0.01"
-              placeholder="0,00"
+            <CurrencyInput
               value={form.amount || ''}
-              onChange={(e) => setForm((p) => ({ ...p, amount: parseFloat(e.target.value) || 0 }))}
+              onValueChange={raw => setForm(p => ({ ...p, amount: parseFloat(raw) || 0 }))}
               required
             />
           </div>

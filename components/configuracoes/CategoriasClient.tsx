@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import { Plus, Pencil, Trash2, Check, X, Lock, RefreshCw, Play } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { CurrencyInput } from '@/components/ui/currency-input'
 import { Badge } from '@/components/ui/badge'
 import { toast } from 'sonner'
 import { CATEGORY_COLORS } from '@/lib/types'
@@ -337,8 +338,8 @@ export default function CategoriasClient({ producerCategories, platformCategorie
                   </div>
                   <div className="w-28">
                     <label className="text-xs text-gray-500 mb-1 block">Valor (R$)</label>
-                    <Input value={newRecForm.amount} onChange={e => setNewRecForm(p => ({ ...p, amount: e.target.value }))}
-                      placeholder="0,00" className="h-8 text-sm" type="number" min="0" step="0.01" />
+                    <CurrencyInput value={newRecForm.amount} onValueChange={raw => setNewRecForm(p => ({ ...p, amount: raw }))}
+                      className="h-8 text-sm" />
                   </div>
                   <div className="w-24">
                     <label className="text-xs text-gray-500 mb-1 block">Dia do mês</label>
@@ -386,8 +387,8 @@ export default function CategoriasClient({ producerCategories, platformCategorie
                                 className="h-7 rounded border border-input bg-background px-2 text-sm">
                                 {platExpenses.map(c => <option key={c.slug} value={c.slug}>{c.name}</option>)}
                               </select>
-                              <Input value={editRecForm.amount} onChange={e => setEditRecForm(p => ({ ...p, amount: e.target.value }))}
-                                className="h-7 text-sm w-24" type="number" min="0" step="0.01" placeholder="Valor" />
+                              <CurrencyInput value={editRecForm.amount} onValueChange={raw => setEditRecForm(p => ({ ...p, amount: raw }))}
+                                className="h-7 text-sm w-24" />
                               <Input value={editRecForm.billing_day} onChange={e => setEditRecForm(p => ({ ...p, billing_day: e.target.value }))}
                                 className="h-7 text-sm w-16" type="number" min="1" max="28" />
                               <button onClick={() => saveEditRec(rec)} disabled={savingRec} className="text-green-600 p-1"><Check className="h-4 w-4" /></button>

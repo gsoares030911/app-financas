@@ -7,6 +7,7 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { CurrencyInput } from '@/components/ui/currency-input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { createClient } from '@/lib/supabase/client'
@@ -283,11 +284,9 @@ export default function EntryDialog({ open, onOpenChange, producerId, entry, eve
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
                   <Label className="text-sm">Valor Bruto (R$)</Label>
-                  <Input
-                    type="number" min="0.01" step="0.01"
+                  <CurrencyInput
                     value={splitGross}
-                    onChange={e => handleSplitGross(e.target.value)}
-                    placeholder="0,00"
+                    onValueChange={raw => handleSplitGross(raw)}
                   />
                 </div>
                 <div className="space-y-1.5">
@@ -385,12 +384,10 @@ export default function EntryDialog({ open, onOpenChange, producerId, entry, eve
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
               <Label>{splitMode ? 'Valor Líquido (R$)' : 'Valor (R$) *'}</Label>
-              <Input
-                type="number" min="0.01" step="0.01"
+              <CurrencyInput
                 value={form.amount}
-                onChange={e => !splitMode && set('amount', e.target.value)}
+                onValueChange={raw => !splitMode && set('amount', raw)}
                 readOnly={splitMode}
-                placeholder="0,00"
                 className={splitMode ? 'bg-gray-50 font-semibold text-green-700 cursor-not-allowed' : ''}
                 required
               />

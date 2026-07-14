@@ -6,6 +6,7 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { CurrencyInput } from '@/components/ui/currency-input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { createClient } from '@/lib/supabase/client'
@@ -173,13 +174,9 @@ export default function PlatformEntryDialog({ open, onOpenChange, entry, onSaved
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
               <Label>Valor (R$) *</Label>
-              <Input
-                type="number"
-                min="0.01"
-                step="0.01"
+              <CurrencyInput
                 value={form.amount}
-                onChange={e => set('amount', e.target.value)}
-                placeholder="0,00"
+                onValueChange={raw => set('amount', raw)}
                 required
               />
             </div>
