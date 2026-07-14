@@ -109,7 +109,7 @@ export default function EquipamentosClient({ rentals: initialRentals, producers,
   // Máquinas state
   const [searchMachine, setSearchMachine] = useState('')
   const [machineFilter, setMachineFilter] = useState<MachineFilter>('todos')
-  const [machineSort, setMachineSort] = useState<{ col: MachineSortCol; dir: SortDir }>({ col: 'serial_number', dir: 'asc' })
+  const [machineSort, setMachineSort] = useState<{ col: MachineSortCol; dir: SortDir }>({ col: 'model', dir: 'asc' })
   const [machineDialogOpen, setMachineDialogOpen] = useState(false)
   const [editingMachine, setEditingMachine] = useState<Machine | null>(null)
 
@@ -650,7 +650,6 @@ export default function EquipamentosClient({ rentals: initialRentals, producers,
             <table className="w-full text-sm">
               <thead className="bg-gray-50 border-b">
                 <tr>
-                  <SortTh col="serial_number" sort={machineSort} onSort={col => toggleMachineSort(col as MachineSortCol)} className="text-left">Nº Série</SortTh>
                   <SortTh col="model" sort={machineSort} onSort={col => toggleMachineSort(col as MachineSortCol)} className="text-left">Modelo</SortTh>
                   <SortTh col="operator" sort={machineSort} onSort={col => toggleMachineSort(col as MachineSortCol)} className="text-left">Operadora</SortTh>
                   <SortTh col="received_at" sort={machineSort} onSort={col => toggleMachineSort(col as MachineSortCol)} className="text-left">Recebida em</SortTh>
@@ -660,7 +659,7 @@ export default function EquipamentosClient({ rentals: initialRentals, producers,
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {filteredMachines.length === 0 && (
-                  <tr><td colSpan={6} className="px-4 py-10 text-center text-gray-400">
+                  <tr><td colSpan={5} className="px-4 py-10 text-center text-gray-400">
                     {initialMachines.length === 0
                       ? 'Nenhuma máquina cadastrada. Cadastre as máquinas recebidas da operadora.'
                       : 'Nenhuma máquina encontrada.'}
@@ -668,8 +667,7 @@ export default function EquipamentosClient({ rentals: initialRentals, producers,
                 )}
                 {filteredMachines.map(m => (
                   <tr key={m.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-4 py-3 font-mono text-xs font-medium text-gray-800">{m.serial_number}</td>
-                    <td className="px-4 py-3 text-gray-700">{m.model}</td>
+                    <td className="px-4 py-3 font-medium text-gray-800">{m.model}</td>
                     <td className="px-4 py-3">
                       <span className="inline-flex items-center gap-1 text-gray-600">
                         <Building2 className="h-3 w-3 text-gray-400" />

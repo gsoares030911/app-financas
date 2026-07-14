@@ -54,14 +54,13 @@ export default function MachineDialog({ open, onOpenChange, machine }: Props) {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!form.serial_number.trim()) { toast.error('Nº de série é obrigatório'); return }
     if (!form.model.trim()) { toast.error('Modelo é obrigatório'); return }
     if (!form.operator.trim()) { toast.error('Operadora é obrigatória'); return }
 
     setLoading(true)
     try {
       const payload = {
-        serial_number: form.serial_number.trim().toUpperCase(),
+        serial_number: form.model.trim(),
         model: form.model.trim(),
         operator: form.operator.trim(),
         received_at: form.received_at || null,
@@ -92,17 +91,6 @@ export default function MachineDialog({ open, onOpenChange, machine }: Props) {
           <DialogTitle>{machine ? 'Editar Máquina' : 'Nova Máquina'}</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
-
-          <div className="space-y-2">
-            <Label>Nº de Série *</Label>
-            <Input
-              value={form.serial_number}
-              onChange={e => set('serial_number', e.target.value)}
-              placeholder="Ex: SN-001234"
-              autoComplete="off"
-              required
-            />
-          </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
