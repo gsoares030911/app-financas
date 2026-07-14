@@ -128,10 +128,10 @@ export default function EquipmentRentalDialog({ open, onOpenChange, producerId, 
     if (!form.machine_id) { toast.error('Selecione uma máquina'); return }
 
     const amount = form.is_bonificada ? 0 : Number(form.monthly_amount)
-    const day = Number(form.billing_day)
+    const day = form.is_bonificada ? 1 : Number(form.billing_day)
 
     if (!form.is_bonificada && (!amount || amount <= 0)) { toast.error('Valor mensal deve ser maior que zero'); return }
-    if (!day || day < 1 || day > 28) { toast.error('Dia de cobrança deve ser entre 1 e 28'); return }
+    if (!form.is_bonificada && (!day || day < 1 || day > 28)) { toast.error('Dia de cobrança deve ser entre 1 e 28'); return }
 
     const selectedMachine = machines?.find(m => m.id === form.machine_id)
     const equipmentName = selectedMachine
