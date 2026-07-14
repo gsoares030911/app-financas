@@ -21,8 +21,7 @@ Sistema de gestão financeira da plataforma Bilheteria Express, desenvolvido com
   - Anti-duplicidade: eventos já cobertos por uma OP existente são excluídos automaticamente
   - Numeração sequencial por ano (`OP-2026-001`)
 - Eventos por produtor com status Pendente / Liquidado
-- **Aluguéis de equipamentos**: cadastro de contratos com dia de cobrança, início/fim e status
-  - Botão **"Gerar cobranças do mês"**: cria débito `aluguel_equipamento` para cada contrato ativo não cobrado no mês; anti-duplicata por `reference_month`
+- **Aluguéis de equipamentos** (aba dentro do produtor): visualização e cadastro dos contratos vinculados ao produtor
 - Lançamentos manuais com categorias customizáveis
 
 ### Ordens de Pagamento
@@ -37,6 +36,18 @@ Sistema de gestão financeira da plataforma Bilheteria Express, desenvolvido com
   - Detecção automática do tipo de chave PIX (CPF/CNPJ, e-mail, telefone, aleatória)
   - Config da empresa pagadora salva no Supabase (compartilhada entre usuários/máquinas)
 - Documento imprimível por OP com dados do produtor, eventos e conta corrente
+
+### Equipamentos
+- Lista global de todos os contratos de aluguel de equipamentos de todos os produtores
+- **Código automático** (`EQ-001`, `EQ-002`…) gerado no cadastro; busca por código na listagem
+- **Busca por produtor** com autocomplete — digita o nome, seleciona na lista
+- Cadastro vincula o equipamento ao produtor diretamente (sem precisar entrar no extrato)
+- Aba dentro de cada produtor mantida para visualização contextual
+- **Cobrança automática**: Vercel Cron Job roda todo último dia do mês e gera automaticamente um débito `aluguel_equipamento` para cada contrato ativo não cobrado no mês — zero intervenção manual
+  - Anti-duplicata por `reference_month`: nunca gera duas cobranças do mesmo mês
+  - Trava de devolução: desativar o contrato (`is_active = false`) ou preencher `Fim do Contrato` impede a cobrança do mês seguinte; mês corrente é cobrado integralmente
+  - Botão **"Gerar cobranças do mês"** disponível como fallback manual na página global
+  - Cron configurado em `vercel.json`; requer variável de ambiente `CRON_SECRET` no Vercel
 
 ### Bilheteria Express (P&L da Plataforma)
 - Importação de dados via API externa por período com histórico de importações (chips clicáveis)
@@ -95,7 +106,10 @@ NEXT_PUBLIC_SUPABASE_URL=...
 NEXT_PUBLIC_SUPABASE_ANON_KEY=...
 SUPABASE_SERVICE_ROLE_KEY=...
 BILHETERIA_API_TOKEN=...
+CRON_SECRET=...
 ```
+
+> `CRON_SECRET`: string segura qualquer (ex: `be-equipamentos-2026`). Deve ser adicionada também em **Vercel → Settings → Environment Variables** para que o Cron Job de equipamentos funcione em produção.
 
 ## Deploy
 
