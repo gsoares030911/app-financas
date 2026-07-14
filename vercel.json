@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/equipment-charges",
+      "schedule": "0 6 28-31 * *"
+    }
+  ]
+}

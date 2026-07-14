@@ -6,7 +6,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import {
   LogOut, Menu, X, Users, Trophy, Ticket,
-  Settings, FileText, ShieldCheck, ChevronDown, ChevronRight, KeyRound,
+  Settings, FileText, ShieldCheck, ChevronDown, ChevronRight, KeyRound, Package,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
@@ -20,6 +20,7 @@ const ADMIN_NAV = [
   { href: '/dashboard/producers',        label: 'Produtores',          icon: Users },
   { href: '/dashboard/ordens-pagamento', label: 'Ordens de Pagamento', icon: FileText },
   { href: '/dashboard/bilheteria',       label: 'Bilheteria Express',  icon: Ticket },
+  { href: '/dashboard/equipamentos',     label: 'Equipamentos',        icon: Package },
 ]
 
 const FIN_BILHETERIA_NAV = [
@@ -27,6 +28,7 @@ const FIN_BILHETERIA_NAV = [
   { href: '/dashboard/producers',        label: 'Produtores',          icon: Users },
   { href: '/dashboard/ordens-pagamento', label: 'Ordens de Pagamento', icon: FileText },
   { href: '/dashboard/bilheteria',       label: 'Bilheteria Express',  icon: Ticket },
+  { href: '/dashboard/equipamentos',     label: 'Equipamentos',        icon: Package },
 ]
 
 const PRODUCER_NAV = [

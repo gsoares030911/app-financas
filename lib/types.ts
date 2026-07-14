@@ -276,6 +276,7 @@ export interface AccountEntryFormData {
 export interface EquipmentRental {
   id: string
   producer_id: string
+  equipment_code: string | null
   equipment_name: string
   monthly_amount: number
   billing_day: number
