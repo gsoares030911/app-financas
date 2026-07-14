@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
-import type { EquipmentRental, EquipmentRentalFormData, Producer } from '@/lib/types'
+import type { EquipmentRental, EquipmentRentalFormData, Producer, Machine } from '@/lib/types'
 
 interface Props {
   open: boolean
@@ -18,6 +18,7 @@ interface Props {
   producerId: string
   rental: EquipmentRental | null
   producers?: Producer[]
+  machines?: Machine[]
 }
 
 const today = new Date().toISOString().split('T')[0]
@@ -32,6 +33,7 @@ const EMPTY: EquipmentRentalFormData = {
   returned_to_network: false,
   returned_at: '',
   notes: '',
+  machine_id: '',
 }
 
 async function nextCode(supabase: ReturnType<typeof createClient>): Promise<string> {
@@ -47,7 +49,7 @@ async function nextCode(supabase: ReturnType<typeof createClient>): Promise<stri
   return `EQ-${String(n + 1).padStart(3, '0')}`
 }
 
-export default function EquipmentRentalDialog({ open, onOpenChange, producerId, rental, producers }: Props) {
+export default function EquipmentRentalDialog({ open, onOpenChange, producerId, rental, producers, machines }: Props) {
   const router = useRouter()
   const supabase = createClient()
   const [form, setForm] = useState<EquipmentRentalFormData>(EMPTY)
@@ -75,6 +77,7 @@ export default function EquipmentRentalDialog({ open, onOpenChange, producerId, 
         returned_to_network: rental.returned_to_network,
         returned_at: rental.returned_at ?? '',
         notes: rental.notes ?? '',
+        machine_id: rental.machine_id ?? '',
       })
       if (standalone && producers) {
         const p = producers.find(x => x.id === rental.producer_id)
@@ -133,6 +136,7 @@ export default function EquipmentRentalDialog({ open, onOpenChange, producerId, 
         returned_to_network: form.returned_to_network,
         returned_at: form.returned_at || null,
         notes: form.notes.trim() || null,
+        machine_id: form.machine_id || null,
       }
       if (rental) {
         const { error } = await supabase.from('equipment_rentals').update(payload).eq('id', rental.id)
@@ -193,6 +197,24 @@ export default function EquipmentRentalDialog({ open, onOpenChange, producerId, 
                   </div>
                 )}
               </div>
+            </div>
+          )}
+
+          {machines && machines.length > 0 && (
+            <div className="space-y-2">
+              <Label>Máquina (opcional)</Label>
+              <select
+                value={form.machine_id}
+                onChange={e => set('machine_id', e.target.value)}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring"
+              >
+                <option value="">— Sem máquina vinculada —</option>
+                {machines.map(m => (
+                  <option key={m.id} value={m.id}>
+                    {m.serial_number} — {m.model} ({m.operator})
+                  </option>
+                ))}
+              </select>
             </div>
           )}
 

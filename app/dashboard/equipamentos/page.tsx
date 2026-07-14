@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import EquipamentosClient from '@/components/equipamentos/EquipamentosClient'
-import type { Producer, PdvLocation } from '@/lib/types'
+import type { Producer, PdvLocation, Machine } from '@/lib/types'
 import type { RentalWithProducer } from '@/components/equipamentos/EquipamentosClient'
 
 export default async function EquipamentosPage() {
@@ -9,7 +9,7 @@ export default async function EquipamentosPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const [{ data: rentals }, { data: producers }, { data: pdvs }] = await Promise.all([
+  const [{ data: rentals }, { data: producers }, { data: pdvs }, { data: machines }] = await Promise.all([
     supabase
       .from('equipment_rentals')
       .select('*, producers(id, full_name)')
@@ -22,6 +22,10 @@ export default async function EquipamentosPage() {
       .from('pdv_locations')
       .select('*')
       .order('name', { ascending: true }),
+    supabase
+      .from('machines')
+      .select('*')
+      .order('serial_number', { ascending: true }),
   ])
 
   return (
@@ -36,6 +40,7 @@ export default async function EquipamentosPage() {
         rentals={(rentals ?? []) as RentalWithProducer[]}
         producers={(producers ?? []) as Producer[]}
         pdvs={(pdvs ?? []) as PdvLocation[]}
+        machines={(machines ?? []) as Machine[]}
       />
     </div>
   )

@@ -273,9 +273,36 @@ export interface AccountEntryFormData {
   reference_month: string | null
 }
 
+export interface Machine {
+  id: string
+  serial_number: string
+  model: string
+  operator: string
+  received_at: string | null
+  notes: string | null
+  created_at: string
+}
+
+export interface MachineFormData {
+  serial_number: string
+  model: string
+  operator: string
+  received_at: string
+  notes: string
+}
+
+export type MachineStatus = 'escritorio' | 'produtor' | 'pdv' | 'devolvida'
+
+export interface MachineWithStatus extends Machine {
+  status: MachineStatus
+  location_name: string | null
+  location_since: string | null
+}
+
 export interface EquipmentRental {
   id: string
   producer_id: string
+  machine_id: string | null
   equipment_code: string | null
   equipment_name: string
   monthly_amount: number
@@ -299,6 +326,7 @@ export interface EquipmentRentalFormData {
   returned_to_network: boolean
   returned_at: string
   notes: string
+  machine_id: string
 }
 
 // =============================================
@@ -347,6 +375,7 @@ export const PLATFORM_EXPENSE_CATEGORIES: PlatformCategory[] = [
 
 export interface PdvLocation {
   id: string
+  machine_id: string | null
   name: string
   store_name: string
   address: string | null
@@ -373,6 +402,7 @@ export interface PdvLocationFormData {
   returned_to_network: boolean
   returned_at: string
   notes: string
+  machine_id: string
 }
 
 export interface PlatformEntry {

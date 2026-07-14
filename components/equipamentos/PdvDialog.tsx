@@ -10,12 +10,13 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
-import type { PdvLocation, PdvLocationFormData } from '@/lib/types'
+import type { PdvLocation, PdvLocationFormData, Machine } from '@/lib/types'
 
 interface Props {
   open: boolean
   onOpenChange: (open: boolean) => void
   pdv: PdvLocation | null
+  machines?: Machine[]
 }
 
 const today = new Date().toISOString().split('T')[0]
@@ -32,9 +33,10 @@ const EMPTY: PdvLocationFormData = {
   returned_to_network: false,
   returned_at: '',
   notes: '',
+  machine_id: '',
 }
 
-export default function PdvDialog({ open, onOpenChange, pdv }: Props) {
+export default function PdvDialog({ open, onOpenChange, pdv, machines }: Props) {
   const router = useRouter()
   const supabase = createClient()
   const [form, setForm] = useState<PdvLocationFormData>(EMPTY)
@@ -54,6 +56,7 @@ export default function PdvDialog({ open, onOpenChange, pdv }: Props) {
         returned_to_network: pdv.returned_to_network,
         returned_at: pdv.returned_at ?? '',
         notes: pdv.notes ?? '',
+        machine_id: pdv.machine_id ?? '',
       })
     } else {
       setForm(EMPTY)
@@ -110,6 +113,7 @@ export default function PdvDialog({ open, onOpenChange, pdv }: Props) {
         returned_to_network: form.returned_to_network,
         returned_at: form.returned_at || null,
         notes: form.notes.trim() || null,
+        machine_id: form.machine_id || null,
       }
 
       if (pdv) {
@@ -259,6 +263,24 @@ export default function PdvDialog({ open, onOpenChange, pdv }: Props) {
               </div>
             )}
           </div>
+
+          {machines && machines.length > 0 && (
+            <div className="space-y-2">
+              <Label>Máquina (opcional)</Label>
+              <select
+                value={form.machine_id}
+                onChange={e => set('machine_id', e.target.value)}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring"
+              >
+                <option value="">— Sem máquina vinculada —</option>
+                {machines.map(m => (
+                  <option key={m.id} value={m.id}>
+                    {m.serial_number} — {m.model} ({m.operator})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           <div className="space-y-2">
             <Label>Observações</Label>
