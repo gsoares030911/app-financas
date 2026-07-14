@@ -112,6 +112,8 @@ export default function EquipamentosClient({ rentals: initialRentals, producers,
   const [machineSort, setMachineSort] = useState<{ col: MachineSortCol; dir: SortDir }>({ col: 'model', dir: 'asc' })
   const [machineDialogOpen, setMachineDialogOpen] = useState(false)
   const [editingMachine, setEditingMachine] = useState<Machine | null>(null)
+  const [selectedMachineIds, setSelectedMachineIds] = useState<Set<string>>(new Set())
+  const [devolvendoMachines, setDevolvendoMachines] = useState(false)
 
   function toggleEquipSort(col: EquipSortCol) {
     setEquipSort(prev => prev.col === col ? { col, dir: prev.dir === 'asc' ? 'desc' : 'asc' } : { col, dir: 'asc' })
@@ -133,7 +135,8 @@ export default function EquipamentosClient({ rentals: initialRentals, producers,
       if (r.returned_to_network) {
         if (!map.has(r.machine_id))
           map.set(r.machine_id, { status: 'devolvida', location_name: null, location_since: r.returned_at })
-      } else if (r.is_active) {
+      } else {
+        // is_active controla cobrança; localização física depende só de returned_to_network
         map.set(r.machine_id, { status: 'produtor', location_name: r.producers?.full_name ?? null, location_since: r.start_date })
       }
     }
@@ -142,12 +145,15 @@ export default function EquipamentosClient({ rentals: initialRentals, producers,
       if (!p.machine_id || map.has(p.machine_id)) continue
       if (p.returned_to_network) {
         map.set(p.machine_id, { status: 'devolvida', location_name: null, location_since: p.returned_at })
-      } else if (p.is_active) {
+      } else {
         map.set(p.machine_id, { status: 'pdv', location_name: p.name, location_since: null })
       }
     }
 
     return initialMachines.map(m => {
+      if (m.returned_to_network) {
+        return { ...m, status: 'devolvida' as MachineStatus, location_name: null, location_since: m.returned_at ?? null }
+      }
       const assignment = map.get(m.id)
       return {
         ...m,
@@ -355,6 +361,48 @@ export default function EquipamentosClient({ rentals: initialRentals, producers,
   }
 
   // ── Máquinas handlers ─────────────────────────────────────────
+
+  function toggleMachineSelection(id: string) {
+    setSelectedMachineIds(prev => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
+
+  function toggleSelectAllMachines() {
+    const selectableIds = filteredMachines
+      .filter(m => m.status !== 'devolvida')
+      .map(m => m.id)
+    const allSelected = selectableIds.every(id => selectedMachineIds.has(id))
+    if (allSelected) {
+      setSelectedMachineIds(new Set())
+    } else {
+      setSelectedMachineIds(new Set(selectableIds))
+    }
+  }
+
+  async function handleDevolverSelecionadas() {
+    const ids = [...selectedMachineIds]
+    if (ids.length === 0) return
+    if (!confirm(`Devolver ${ids.length} máquina(s) à operadora? Esta ação marca as máquinas como saídas do inventário.`)) return
+    setDevolvendoMachines(true)
+    try {
+      const today = new Date().toISOString().split('T')[0]
+      const { error } = await supabase
+        .from('machines')
+        .update({ returned_to_network: true, returned_at: today })
+        .in('id', ids)
+      if (error) throw error
+      toast.success(`${ids.length} máquina(s) devolvida(s) à operadora!`)
+      setSelectedMachineIds(new Set())
+      router.refresh()
+    } catch (err: unknown) {
+      toast.error((err as Error).message ?? 'Erro ao devolver máquinas')
+    } finally {
+      setDevolvendoMachines(false)
+    }
+  }
 
   async function handleDeleteMachine(m: Machine) {
     if (!confirm(`Excluir máquina "${m.serial_number}" (${m.model})?`)) return
@@ -616,6 +664,17 @@ export default function EquipamentosClient({ rentals: initialRentals, producers,
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
               <Input className="pl-9" placeholder="Buscar por série, modelo, operadora ou local..." value={searchMachine} onChange={e => setSearchMachine(e.target.value)} />
             </div>
+            {selectedMachineIds.size > 0 && (
+              <Button
+                variant="outline"
+                onClick={handleDevolverSelecionadas}
+                disabled={devolvendoMachines}
+                className="gap-2 border-red-300 text-red-700 hover:bg-red-50"
+              >
+                <RotateCcw className="h-4 w-4" />
+                {devolvendoMachines ? 'Devolvendo...' : `Devolver Selecionadas (${selectedMachineIds.size})`}
+              </Button>
+            )}
             <Button onClick={() => { setEditingMachine(null); setMachineDialogOpen(true) }} className="gap-2">
               <Plus className="h-4 w-4" />
               Nova Máquina
@@ -650,6 +709,15 @@ export default function EquipamentosClient({ rentals: initialRentals, producers,
             <table className="w-full text-sm">
               <thead className="bg-gray-50 border-b">
                 <tr>
+                  <th className="px-4 py-3 w-10">
+                    <input
+                      type="checkbox"
+                      className="rounded w-4 h-4 accent-blue-600"
+                      checked={filteredMachines.filter(m => m.status !== 'devolvida').length > 0 &&
+                        filteredMachines.filter(m => m.status !== 'devolvida').every(m => selectedMachineIds.has(m.id))}
+                      onChange={toggleSelectAllMachines}
+                    />
+                  </th>
                   <SortTh col="model" sort={machineSort} onSort={col => toggleMachineSort(col as MachineSortCol)} className="text-left">Modelo</SortTh>
                   <SortTh col="operator" sort={machineSort} onSort={col => toggleMachineSort(col as MachineSortCol)} className="text-left">Operadora</SortTh>
                   <SortTh col="received_at" sort={machineSort} onSort={col => toggleMachineSort(col as MachineSortCol)} className="text-left">Recebida em</SortTh>
@@ -659,14 +727,24 @@ export default function EquipamentosClient({ rentals: initialRentals, producers,
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {filteredMachines.length === 0 && (
-                  <tr><td colSpan={5} className="px-4 py-10 text-center text-gray-400">
+                  <tr><td colSpan={6} className="px-4 py-10 text-center text-gray-400">
                     {initialMachines.length === 0
                       ? 'Nenhuma máquina cadastrada. Cadastre as máquinas recebidas da operadora.'
                       : 'Nenhuma máquina encontrada.'}
                   </td></tr>
                 )}
                 {filteredMachines.map(m => (
-                  <tr key={m.id} className="hover:bg-gray-50 transition-colors">
+                  <tr key={m.id} className={`hover:bg-gray-50 transition-colors ${selectedMachineIds.has(m.id) ? 'bg-blue-50' : ''}`}>
+                    <td className="px-4 py-3">
+                      {m.status !== 'devolvida' && (
+                        <input
+                          type="checkbox"
+                          className="rounded w-4 h-4 accent-blue-600"
+                          checked={selectedMachineIds.has(m.id)}
+                          onChange={() => toggleMachineSelection(m.id)}
+                        />
+                      )}
+                    </td>
                     <td className="px-4 py-3 font-medium text-gray-800">{m.model}</td>
                     <td className="px-4 py-3">
                       <span className="inline-flex items-center gap-1 text-gray-600">

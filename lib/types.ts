@@ -280,6 +280,8 @@ export interface Machine {
   operator: string
   received_at: string | null
   notes: string | null
+  returned_to_network: boolean
+  returned_at: string | null
   created_at: string
 }
 
