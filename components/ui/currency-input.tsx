@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { Input } from './input'
 import { cn } from '@/lib/utils'
 
@@ -15,40 +15,50 @@ interface Props {
   suffix?: React.ReactNode
 }
 
-function toDisplay(value: string | number | undefined): string {
-  if (value === '' || value === undefined || value === null) return ''
+function centsToBRL(cents: number): string {
+  return (cents / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+function valueToCents(value: string | number | undefined): number {
+  if (value === '' || value === undefined || value === null) return 0
   const num = typeof value === 'number' ? value : parseFloat(String(value).replace(',', '.'))
-  if (isNaN(num)) return ''
-  return num.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  if (isNaN(num) || num === 0) return 0
+  return Math.round(num * 100)
 }
 
-function parseDisplay(display: string): string {
-  return display
-    .replace(/\./g, '')
-    .replace(',', '.')
-    .replace(/[^0-9.]/g, '')
-}
-
-export function CurrencyInput({ value, onValueChange, placeholder = '0,00', className, readOnly, suffix, ...props }: Props) {
+export function CurrencyInput({
+  value, onValueChange, placeholder = '0,00', className, readOnly, suffix, ...props
+}: Props) {
   const [display, setDisplay] = useState('')
-  const typing = useRef(false)
+  const [focused, setFocused] = useState(false)
 
+  // Sincroniza do valor externo quando o campo não está em foco
   useEffect(() => {
-    if (typing.current) return
-    setDisplay(toDisplay(value))
-  }, [value])
+    if (!focused) {
+      const c = valueToCents(value)
+      setDisplay(c > 0 ? centsToBRL(c) : '')
+    }
+  }, [value, focused])
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
-    typing.current = true
-    const filtered = e.target.value.replace(/[^0-9,.]/g, '')
-    setDisplay(filtered)
-    onValueChange(parseDisplay(filtered))
+    // Extrai apenas dígitos — comportamento ATM (centavos da direita para esquerda)
+    const digits = e.target.value.replace(/\D/g, '')
+    if (!digits) {
+      setDisplay('')
+      onValueChange('')
+      return
+    }
+    const cents = parseInt(digits, 10)
+    setDisplay(centsToBRL(cents))
+    onValueChange(String(cents / 100))
+  }
+
+  function handleFocus() {
+    setFocused(true)
   }
 
   function handleBlur() {
-    typing.current = false
-    const raw = parseDisplay(display)
-    setDisplay(raw && !isNaN(parseFloat(raw)) ? toDisplay(raw) : '')
+    setFocused(false)
   }
 
   return (
@@ -59,10 +69,11 @@ export function CurrencyInput({ value, onValueChange, placeholder = '0,00', clas
       <Input
         {...props}
         type="text"
-        inputMode="decimal"
+        inputMode="numeric"
         readOnly={readOnly}
         value={display}
         onChange={handleChange}
+        onFocus={handleFocus}
         onBlur={handleBlur}
         placeholder={placeholder}
         className={cn('pl-9', suffix ? 'pr-14' : '', className)}
