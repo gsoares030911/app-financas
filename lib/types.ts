@@ -283,6 +283,8 @@ export interface EquipmentRental {
   start_date: string
   end_date: string | null
   is_active: boolean
+  returned_to_network: boolean
+  returned_at: string | null
   notes: string | null
   created_at: string
 }
@@ -294,6 +296,8 @@ export interface EquipmentRentalFormData {
   start_date: string
   end_date: string
   is_active: boolean
+  returned_to_network: boolean
+  returned_at: string
   notes: string
 }
 
@@ -351,6 +355,8 @@ export interface PdvLocation {
   billing_day: number
   is_bonificada: boolean
   is_active: boolean
+  returned_to_network: boolean
+  returned_at: string | null
   notes: string | null
   created_at: string
 }
@@ -364,6 +370,8 @@ export interface PdvLocationFormData {
   billing_day: number | string
   is_bonificada: boolean
   is_active: boolean
+  returned_to_network: boolean
+  returned_at: string
   notes: string
 }
 

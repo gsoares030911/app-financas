@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
-import { Plus, Search, Pencil, Trash2, CheckCircle, XCircle, Zap, Gift, MapPin } from 'lucide-react'
+import { Plus, Search, Pencil, Trash2, CheckCircle, XCircle, Zap, Gift, MapPin, RotateCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -278,9 +278,11 @@ export default function EquipamentosClient({ rentals: initialRentals, producers,
                     <td className="px-4 py-3 text-gray-500">{new Date(r.start_date + 'T12:00:00').toLocaleDateString('pt-BR')}</td>
                     <td className="px-4 py-3 text-gray-500">{r.end_date ? new Date(r.end_date + 'T12:00:00').toLocaleDateString('pt-BR') : '—'}</td>
                     <td className="px-4 py-3 text-center">
-                      {r.is_active
-                        ? <Badge className="bg-green-100 text-green-700 border-0 gap-1"><CheckCircle className="h-3 w-3" />Ativo</Badge>
-                        : <Badge className="bg-gray-100 text-gray-500 border-0 gap-1"><XCircle className="h-3 w-3" />Inativo</Badge>}
+                      {r.returned_to_network
+                        ? <Badge className="bg-red-100 text-red-700 border-0 gap-1"><RotateCcw className="h-3 w-3" />Dev. à Rede</Badge>
+                        : r.is_active
+                          ? <Badge className="bg-green-100 text-green-700 border-0 gap-1"><CheckCircle className="h-3 w-3" />Ativo</Badge>
+                          : <Badge className="bg-gray-100 text-gray-500 border-0 gap-1"><XCircle className="h-3 w-3" />Inativo</Badge>}
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1 justify-end">
@@ -353,9 +355,11 @@ export default function EquipamentosClient({ rentals: initialRentals, producers,
                     </td>
                     <td className="px-4 py-3 text-center text-gray-600">{p.is_bonificada ? '—' : p.billing_day}</td>
                     <td className="px-4 py-3 text-center">
-                      {p.is_active
-                        ? <Badge className="bg-green-100 text-green-700 border-0 gap-1"><CheckCircle className="h-3 w-3" />Ativo</Badge>
-                        : <Badge className="bg-gray-100 text-gray-500 border-0 gap-1"><XCircle className="h-3 w-3" />Inativo</Badge>}
+                      {p.returned_to_network
+                        ? <Badge className="bg-red-100 text-red-700 border-0 gap-1"><RotateCcw className="h-3 w-3" />Dev. à Rede</Badge>
+                        : p.is_active
+                          ? <Badge className="bg-green-100 text-green-700 border-0 gap-1"><CheckCircle className="h-3 w-3" />Ativo</Badge>
+                          : <Badge className="bg-gray-100 text-gray-500 border-0 gap-1"><XCircle className="h-3 w-3" />Inativo</Badge>}
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1 justify-end">

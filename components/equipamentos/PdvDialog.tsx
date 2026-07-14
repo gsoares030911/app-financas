@@ -29,6 +29,8 @@ const EMPTY: PdvLocationFormData = {
   billing_day: '1',
   is_bonificada: false,
   is_active: true,
+  returned_to_network: false,
+  returned_at: '',
   notes: '',
 }
 
@@ -49,6 +51,8 @@ export default function PdvDialog({ open, onOpenChange, pdv }: Props) {
         billing_day: pdv.billing_day,
         is_bonificada: pdv.is_bonificada,
         is_active: pdv.is_active,
+        returned_to_network: pdv.returned_to_network,
+        returned_at: pdv.returned_at ?? '',
         notes: pdv.notes ?? '',
       })
     } else {
@@ -65,6 +69,15 @@ export default function PdvDialog({ open, onOpenChange, pdv }: Props) {
       ...prev,
       is_bonificada: checked,
       monthly_cost: checked ? 0 : '',
+    }))
+  }
+
+  function handleReturnedToNetwork(checked: boolean) {
+    setForm(prev => ({
+      ...prev,
+      returned_to_network: checked,
+      is_active: checked ? false : prev.is_active,
+      returned_at: checked ? (prev.returned_at || new Date().toISOString().split('T')[0]) : '',
     }))
   }
 
@@ -93,7 +106,9 @@ export default function PdvDialog({ open, onOpenChange, pdv }: Props) {
         monthly_cost: cost,
         billing_day: day,
         is_bonificada: form.is_bonificada,
-        is_active: form.is_active,
+        is_active: form.returned_to_network ? false : form.is_active,
+        returned_to_network: form.returned_to_network,
+        returned_at: form.returned_at || null,
         notes: form.notes.trim() || null,
       }
 
@@ -213,9 +228,36 @@ export default function PdvDialog({ open, onOpenChange, pdv }: Props) {
                 checked={form.is_active}
                 onChange={e => set('is_active', e.target.checked)}
                 className="rounded"
+                disabled={form.returned_to_network}
               />
               PDV ativo
             </label>
+          </div>
+
+          {/* Devolvida à Rede */}
+          <div className="space-y-2 pt-1 border-t">
+            <label className="flex items-center gap-3 p-3 rounded-lg border border-dashed border-red-200 cursor-pointer select-none hover:bg-red-50 transition-colors">
+              <input
+                type="checkbox"
+                checked={form.returned_to_network}
+                onChange={e => handleReturnedToNetwork(e.target.checked)}
+                className="rounded w-4 h-4 accent-red-600"
+              />
+              <div>
+                <p className="text-sm font-medium text-red-700">Máquina devolvida à Rede</p>
+                <p className="text-xs text-red-400">O equipamento não está mais em nosso poder — desativa automaticamente</p>
+              </div>
+            </label>
+            {form.returned_to_network && (
+              <div className="space-y-1">
+                <Label className="text-xs text-gray-500">Data de devolução</Label>
+                <Input
+                  type="date"
+                  value={form.returned_at}
+                  onChange={e => set('returned_at', e.target.value)}
+                />
+              </div>
+            )}
           </div>
 
           <div className="space-y-2">

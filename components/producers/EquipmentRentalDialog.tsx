@@ -29,6 +29,8 @@ const EMPTY: EquipmentRentalFormData = {
   start_date: today,
   end_date: '',
   is_active: true,
+  returned_to_network: false,
+  returned_at: '',
   notes: '',
 }
 
@@ -70,6 +72,8 @@ export default function EquipmentRentalDialog({ open, onOpenChange, producerId, 
         start_date: rental.start_date,
         end_date: rental.end_date ?? '',
         is_active: rental.is_active,
+        returned_to_network: rental.returned_to_network,
+        returned_at: rental.returned_at ?? '',
         notes: rental.notes ?? '',
       })
       if (standalone && producers) {
@@ -125,7 +129,9 @@ export default function EquipmentRentalDialog({ open, onOpenChange, producerId, 
         billing_day: day,
         start_date: form.start_date,
         end_date: form.end_date || null,
-        is_active: form.is_active,
+        is_active: form.returned_to_network ? false : form.is_active,
+        returned_to_network: form.returned_to_network,
+        returned_at: form.returned_at || null,
         notes: form.notes.trim() || null,
       }
       if (rental) {
@@ -252,9 +258,44 @@ export default function EquipmentRentalDialog({ open, onOpenChange, producerId, 
               checked={form.is_active}
               onChange={e => set('is_active', e.target.checked)}
               className="rounded"
+              disabled={form.returned_to_network}
             />
             Contrato ativo (gera cobrança automática no fim do mês)
           </label>
+
+          {/* Devolvida à Rede */}
+          <div className="space-y-2 pt-1 border-t">
+            <label className="flex items-center gap-3 p-3 rounded-lg border border-dashed border-red-200 cursor-pointer select-none hover:bg-red-50 transition-colors">
+              <input
+                type="checkbox"
+                checked={form.returned_to_network}
+                onChange={e => {
+                  const checked = e.target.checked
+                  setForm(prev => ({
+                    ...prev,
+                    returned_to_network: checked,
+                    is_active: checked ? false : prev.is_active,
+                    returned_at: checked ? (prev.returned_at || new Date().toISOString().split('T')[0]) : '',
+                  }))
+                }}
+                className="rounded w-4 h-4 accent-red-600"
+              />
+              <div>
+                <p className="text-sm font-medium text-red-700">Máquina devolvida à Rede</p>
+                <p className="text-xs text-red-400">O equipamento saiu do nosso inventário — desativa automaticamente</p>
+              </div>
+            </label>
+            {form.returned_to_network && (
+              <div className="space-y-1">
+                <Label className="text-xs text-gray-500">Data de devolução</Label>
+                <Input
+                  type="date"
+                  value={form.returned_at}
+                  onChange={e => set('returned_at', e.target.value)}
+                />
+              </div>
+            )}
+          </div>
 
           <div className="space-y-2">
             <Label>Observações</Label>
