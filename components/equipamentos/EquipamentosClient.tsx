@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
-import { Plus, Search, Pencil, Trash2, CheckCircle, XCircle, Zap, Gift, MapPin, RotateCcw } from 'lucide-react'
+import { Plus, Search, Pencil, Trash2, CheckCircle, XCircle, Zap, Gift, MapPin, RotateCcw, ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -19,6 +19,10 @@ export interface RentalWithProducer extends EquipmentRental {
 type Tab = 'equipamentos' | 'pdv'
 type EquipFilter = 'todos' | 'ativo' | 'inativo' | 'devolvido'
 type PdvFilter = 'todos' | 'ativo' | 'inativo' | 'bonificada' | 'devolvido'
+type SortDir = 'asc' | 'desc'
+
+type EquipSortCol = 'equipment_code' | 'equipment_name' | 'producer' | 'monthly_amount' | 'billing_day' | 'start_date' | 'end_date' | 'status'
+type PdvSortCol = 'name' | 'store_name' | 'phone' | 'monthly_cost' | 'billing_day' | 'status'
 
 interface Props {
   rentals: RentalWithProducer[]
@@ -28,6 +32,35 @@ interface Props {
 
 const fmt = (v: number) =>
   v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+
+function SortIcon({ active, dir }: { active: boolean; dir: SortDir }) {
+  if (!active) return <ChevronsUpDown className="h-3 w-3 ml-1 text-gray-400 inline" />
+  return dir === 'asc'
+    ? <ChevronUp className="h-3 w-3 ml-1 text-blue-600 inline" />
+    : <ChevronDown className="h-3 w-3 ml-1 text-blue-600 inline" />
+}
+
+function SortTh({
+  children, col, sort, onSort, className = '',
+}: {
+  children: React.ReactNode
+  col: string
+  sort: { col: string; dir: SortDir }
+  onSort: (col: string) => void
+  className?: string
+}) {
+  return (
+    <th
+      className={`px-4 py-3 font-medium text-gray-600 cursor-pointer select-none hover:bg-gray-100 transition-colors ${className}`}
+      onClick={() => onSort(col)}
+    >
+      <span className="inline-flex items-center">
+        {children}
+        <SortIcon active={sort.col === col} dir={sort.dir} />
+      </span>
+    </th>
+  )
+}
 
 export default function EquipamentosClient({ rentals: initialRentals, producers, pdvs: initialPdvs }: Props) {
   const router = useRouter()
@@ -39,6 +72,7 @@ export default function EquipamentosClient({ rentals: initialRentals, producers,
   const [searchProducer, setSearchProducer] = useState('')
   const [searchCode, setSearchCode] = useState('')
   const [equipFilter, setEquipFilter] = useState<EquipFilter>('todos')
+  const [equipSort, setEquipSort] = useState<{ col: EquipSortCol; dir: SortDir }>({ col: 'equipment_code', dir: 'asc' })
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editing, setEditing] = useState<EquipmentRental | null>(null)
   const [generatingCharges, setGeneratingCharges] = useState(false)
@@ -46,12 +80,20 @@ export default function EquipamentosClient({ rentals: initialRentals, producers,
   // PDV state
   const [searchPdv, setSearchPdv] = useState('')
   const [pdvFilter, setPdvFilter] = useState<PdvFilter>('todos')
+  const [pdvSort, setPdvSort] = useState<{ col: PdvSortCol; dir: SortDir }>({ col: 'name', dir: 'asc' })
   const [pdvDialogOpen, setPdvDialogOpen] = useState(false)
   const [editingPdv, setEditingPdv] = useState<PdvLocation | null>(null)
   const [generatingPdvCharges, setGeneratingPdvCharges] = useState(false)
 
+  function toggleEquipSort(col: EquipSortCol) {
+    setEquipSort(prev => prev.col === col ? { col, dir: prev.dir === 'asc' ? 'desc' : 'asc' } : { col, dir: 'asc' })
+  }
+  function togglePdvSort(col: PdvSortCol) {
+    setPdvSort(prev => prev.col === col ? { col, dir: prev.dir === 'asc' ? 'desc' : 'asc' } : { col, dir: 'asc' })
+  }
+
   const filteredRentals = useMemo(() => {
-    return initialRentals.filter(r => {
+    const list = initialRentals.filter(r => {
       const producerName = r.producers?.full_name ?? ''
       const matchProducer = producerName.toLowerCase().includes(searchProducer.toLowerCase())
       const matchCode = (r.equipment_code ?? '').toLowerCase().includes(searchCode.toLowerCase())
@@ -61,11 +103,34 @@ export default function EquipamentosClient({ rentals: initialRentals, producers,
       if (equipFilter === 'devolvido') return r.returned_to_network
       return true
     })
-  }, [initialRentals, searchProducer, searchCode, equipFilter])
+
+    const { col, dir } = equipSort
+    list.sort((a, b) => {
+      let va: string | number
+      let vb: string | number
+      if (col === 'producer') {
+        va = a.producers?.full_name ?? ''
+        vb = b.producers?.full_name ?? ''
+      } else if (col === 'status') {
+        const rank = (r: RentalWithProducer) => r.returned_to_network ? 2 : r.is_active ? 0 : 1
+        va = rank(a); vb = rank(b)
+      } else if (col === 'equipment_code') {
+        va = a.equipment_code ?? ''
+        vb = b.equipment_code ?? ''
+      } else {
+        va = (a as unknown as Record<string, string | number>)[col] ?? ''
+        vb = (b as unknown as Record<string, string | number>)[col] ?? ''
+      }
+      if (va < vb) return dir === 'asc' ? -1 : 1
+      if (va > vb) return dir === 'asc' ? 1 : -1
+      return 0
+    })
+    return list
+  }, [initialRentals, searchProducer, searchCode, equipFilter, equipSort])
 
   const filteredPdvs = useMemo(() => {
     const q = searchPdv.toLowerCase()
-    return initialPdvs.filter(p => {
+    const list = initialPdvs.filter(p => {
       const matchSearch = p.name.toLowerCase().includes(q) || p.store_name.toLowerCase().includes(q)
       if (!matchSearch) return false
       if (pdvFilter === 'ativo') return p.is_active && !p.returned_to_network
@@ -74,7 +139,24 @@ export default function EquipamentosClient({ rentals: initialRentals, producers,
       if (pdvFilter === 'devolvido') return p.returned_to_network
       return true
     })
-  }, [initialPdvs, searchPdv, pdvFilter])
+
+    const { col, dir } = pdvSort
+    list.sort((a, b) => {
+      let va: string | number
+      let vb: string | number
+      if (col === 'status') {
+        const rank = (p: PdvLocation) => p.returned_to_network ? 2 : p.is_active ? 0 : 1
+        va = rank(a); vb = rank(b)
+      } else {
+        va = (a as unknown as Record<string, string | number>)[col] ?? ''
+        vb = (b as unknown as Record<string, string | number>)[col] ?? ''
+      }
+      if (va < vb) return dir === 'asc' ? -1 : 1
+      if (va > vb) return dir === 'asc' ? 1 : -1
+      return 0
+    })
+    return list
+  }, [initialPdvs, searchPdv, pdvFilter, pdvSort])
 
   // ── Equipamentos handlers ──────────────────────────────────────
 
@@ -275,9 +357,9 @@ export default function EquipamentosClient({ rentals: initialRentals, producers,
             {(
               [
                 { key: 'todos',    label: `Todos (${equipCounts.total})` },
-                { key: 'ativo',    label: `Ativos (${equipCounts.ativos})`,                 activeClass: 'bg-green-600 text-white border-green-600',   inactiveClass: 'text-green-700 border-green-300 hover:bg-green-50' },
-                { key: 'inativo',  label: `Inativos (${equipCounts.inativos})`,             activeClass: 'bg-gray-500 text-white border-gray-500',     inactiveClass: 'text-gray-600 border-gray-300 hover:bg-gray-50' },
-                { key: 'devolvido',label: `Dev. à Operadora (${equipCounts.devolvidos})`,   activeClass: 'bg-red-600 text-white border-red-600',       inactiveClass: 'text-red-700 border-red-300 hover:bg-red-50' },
+                { key: 'ativo',    label: `Ativos (${equipCounts.ativos})`,               activeClass: 'bg-green-600 text-white border-green-600',   inactiveClass: 'text-green-700 border-green-300 hover:bg-green-50' },
+                { key: 'inativo',  label: `Inativos (${equipCounts.inativos})`,           activeClass: 'bg-gray-500 text-white border-gray-500',     inactiveClass: 'text-gray-600 border-gray-300 hover:bg-gray-50' },
+                { key: 'devolvido',label: `Dev. à Operadora (${equipCounts.devolvidos})`, activeClass: 'bg-red-600 text-white border-red-600',       inactiveClass: 'text-red-700 border-red-300 hover:bg-red-50' },
               ] as { key: EquipFilter; label: string; activeClass?: string; inactiveClass?: string }[]
             ).map(chip => {
               const isActive = equipFilter === chip.key
@@ -306,14 +388,14 @@ export default function EquipamentosClient({ rentals: initialRentals, producers,
             <table className="w-full text-sm">
               <thead className="bg-gray-50 border-b">
                 <tr>
-                  <th className="text-left px-4 py-3 font-medium text-gray-600">Código</th>
-                  <th className="text-left px-4 py-3 font-medium text-gray-600">Equipamento</th>
-                  <th className="text-left px-4 py-3 font-medium text-gray-600">Produtor</th>
-                  <th className="text-right px-4 py-3 font-medium text-gray-600">Valor/Mês</th>
-                  <th className="text-center px-4 py-3 font-medium text-gray-600">Dia Cob.</th>
-                  <th className="text-left px-4 py-3 font-medium text-gray-600">Início</th>
-                  <th className="text-left px-4 py-3 font-medium text-gray-600">Fim</th>
-                  <th className="text-center px-4 py-3 font-medium text-gray-600">Status</th>
+                  <SortTh col="equipment_code" sort={equipSort} onSort={col => toggleEquipSort(col as EquipSortCol)} className="text-left">Código</SortTh>
+                  <SortTh col="equipment_name" sort={equipSort} onSort={col => toggleEquipSort(col as EquipSortCol)} className="text-left">Equipamento</SortTh>
+                  <SortTh col="producer" sort={equipSort} onSort={col => toggleEquipSort(col as EquipSortCol)} className="text-left">Produtor</SortTh>
+                  <SortTh col="monthly_amount" sort={equipSort} onSort={col => toggleEquipSort(col as EquipSortCol)} className="text-right">Valor/Mês</SortTh>
+                  <SortTh col="billing_day" sort={equipSort} onSort={col => toggleEquipSort(col as EquipSortCol)} className="text-center">Dia Cob.</SortTh>
+                  <SortTh col="start_date" sort={equipSort} onSort={col => toggleEquipSort(col as EquipSortCol)} className="text-left">Início</SortTh>
+                  <SortTh col="end_date" sort={equipSort} onSort={col => toggleEquipSort(col as EquipSortCol)} className="text-left">Fim</SortTh>
+                  <SortTh col="status" sort={equipSort} onSort={col => toggleEquipSort(col as EquipSortCol)} className="text-center">Status</SortTh>
                   <th className="px-4 py-3" />
                 </tr>
               </thead>
@@ -374,10 +456,10 @@ export default function EquipamentosClient({ rentals: initialRentals, producers,
             {(
               [
                 { key: 'todos',     label: `Todos (${pdvCounts.total})` },
-                { key: 'ativo',     label: `Ativos (${pdvCounts.ativos})`,                  activeClass: 'bg-green-600 text-white border-green-600',   inactiveClass: 'text-green-700 border-green-300 hover:bg-green-50' },
-                { key: 'inativo',   label: `Inativos (${pdvCounts.inativos})`,              activeClass: 'bg-gray-500 text-white border-gray-500',     inactiveClass: 'text-gray-600 border-gray-300 hover:bg-gray-50' },
-                { key: 'bonificada',label: `Bonificadas (${pdvCounts.bonificadas})`,        activeClass: 'bg-blue-600 text-white border-blue-600',     inactiveClass: 'text-blue-700 border-blue-300 hover:bg-blue-50' },
-                { key: 'devolvido', label: `Dev. à Operadora (${pdvCounts.devolvidos})`,    activeClass: 'bg-red-600 text-white border-red-600',       inactiveClass: 'text-red-700 border-red-300 hover:bg-red-50' },
+                { key: 'ativo',     label: `Ativos (${pdvCounts.ativos})`,                 activeClass: 'bg-green-600 text-white border-green-600',   inactiveClass: 'text-green-700 border-green-300 hover:bg-green-50' },
+                { key: 'inativo',   label: `Inativos (${pdvCounts.inativos})`,             activeClass: 'bg-gray-500 text-white border-gray-500',     inactiveClass: 'text-gray-600 border-gray-300 hover:bg-gray-50' },
+                { key: 'bonificada',label: `Bonificadas (${pdvCounts.bonificadas})`,       activeClass: 'bg-blue-600 text-white border-blue-600',     inactiveClass: 'text-blue-700 border-blue-300 hover:bg-blue-50' },
+                { key: 'devolvido', label: `Dev. à Operadora (${pdvCounts.devolvidos})`,   activeClass: 'bg-red-600 text-white border-red-600',       inactiveClass: 'text-red-700 border-red-300 hover:bg-red-50' },
               ] as { key: PdvFilter; label: string; activeClass?: string; inactiveClass?: string }[]
             ).map(chip => {
               const isActive = pdvFilter === chip.key
@@ -406,13 +488,13 @@ export default function EquipamentosClient({ rentals: initialRentals, producers,
             <table className="w-full text-sm">
               <thead className="bg-gray-50 border-b">
                 <tr>
-                  <th className="text-left px-4 py-3 font-medium text-gray-600">PDV</th>
-                  <th className="text-left px-4 py-3 font-medium text-gray-600">Loja Parceira</th>
-                  <th className="text-left px-4 py-3 font-medium text-gray-600">Telefone</th>
+                  <SortTh col="name" sort={pdvSort} onSort={col => togglePdvSort(col as PdvSortCol)} className="text-left">PDV</SortTh>
+                  <SortTh col="store_name" sort={pdvSort} onSort={col => togglePdvSort(col as PdvSortCol)} className="text-left">Loja Parceira</SortTh>
+                  <SortTh col="phone" sort={pdvSort} onSort={col => togglePdvSort(col as PdvSortCol)} className="text-left">Telefone</SortTh>
                   <th className="text-left px-4 py-3 font-medium text-gray-600">Endereço</th>
-                  <th className="text-right px-4 py-3 font-medium text-gray-600">Custo/Mês</th>
-                  <th className="text-center px-4 py-3 font-medium text-gray-600">Dia Cob.</th>
-                  <th className="text-center px-4 py-3 font-medium text-gray-600">Status</th>
+                  <SortTh col="monthly_cost" sort={pdvSort} onSort={col => togglePdvSort(col as PdvSortCol)} className="text-right">Custo/Mês</SortTh>
+                  <SortTh col="billing_day" sort={pdvSort} onSort={col => togglePdvSort(col as PdvSortCol)} className="text-center">Dia Cob.</SortTh>
+                  <SortTh col="status" sort={pdvSort} onSort={col => togglePdvSort(col as PdvSortCol)} className="text-center">Status</SortTh>
                   <th className="px-4 py-3" />
                 </tr>
               </thead>
