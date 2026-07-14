@@ -818,13 +818,17 @@ export default function EquipamentosClient({ rentals: initialRentals, producers,
         producerId=""
         rental={editing}
         producers={producers}
-        machines={initialMachines}
+        machines={machinesWithStatus.filter(m =>
+          m.status === 'escritorio' || m.id === editing?.machine_id
+        )}
       />
       <PdvDialog
         open={pdvDialogOpen}
         onOpenChange={setPdvDialogOpen}
         pdv={editingPdv}
-        machines={initialMachines}
+        machines={machinesWithStatus.filter(m =>
+          m.status === 'escritorio' || m.id === editingPdv?.machine_id
+        )}
       />
       <MachineDialog
         open={machineDialogOpen}
