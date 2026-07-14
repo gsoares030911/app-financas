@@ -385,16 +385,49 @@ export default function EquipamentosClient({ rentals: initialRentals, producers,
   async function handleDevolverSelecionadas() {
     const ids = [...selectedMachineIds]
     if (ids.length === 0) return
-    if (!confirm(`Devolver ${ids.length} máquina(s) à operadora? Esta ação marca as máquinas como saídas do inventário.`)) return
+
+    // Conta contratos ativos vinculados para informar o usuário
+    const rentaisVinculados = initialRentals.filter(r => r.machine_id && ids.includes(r.machine_id) && !r.returned_to_network)
+    const pdvsVinculados = initialPdvs.filter(p => p.machine_id && ids.includes(p.machine_id) && !p.returned_to_network)
+    const totalContratos = rentaisVinculados.length + pdvsVinculados.length
+
+    const msg = totalContratos > 0
+      ? `Devolver ${ids.length} máquina(s) à operadora?\n\nIsso vai encerrar ${totalContratos} contrato(s) vinculado(s). A cobrança do mês atual é mantida; meses futuros não serão gerados.`
+      : `Devolver ${ids.length} máquina(s) à operadora? Esta ação marca as máquinas como saídas do inventário.`
+    if (!confirm(msg)) return
+
     setDevolvendoMachines(true)
     try {
       const today = new Date().toISOString().split('T')[0]
+
+      // Encerra contratos de produtor vinculados
+      if (rentaisVinculados.length > 0) {
+        const { error } = await supabase
+          .from('equipment_rentals')
+          .update({ returned_to_network: true, is_active: false, returned_at: today })
+          .in('id', rentaisVinculados.map(r => r.id))
+        if (error) throw error
+      }
+
+      // Encerra PDVs vinculados
+      if (pdvsVinculados.length > 0) {
+        const { error } = await supabase
+          .from('pdv_locations')
+          .update({ returned_to_network: true, is_active: false, returned_at: today })
+          .in('id', pdvsVinculados.map(p => p.id))
+        if (error) throw error
+      }
+
+      // Marca as máquinas como devolvidas
       const { error } = await supabase
         .from('machines')
         .update({ returned_to_network: true, returned_at: today })
         .in('id', ids)
       if (error) throw error
-      toast.success(`${ids.length} máquina(s) devolvida(s) à operadora!`)
+
+      const partes = [`${ids.length} máquina(s) devolvida(s) à operadora`]
+      if (totalContratos > 0) partes.push(`${totalContratos} contrato(s) encerrado(s)`)
+      toast.success(partes.join(' · ') + '!')
       setSelectedMachineIds(new Set())
       router.refresh()
     } catch (err: unknown) {
