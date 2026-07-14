@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import EquipamentosClient from '@/components/equipamentos/EquipamentosClient'
-import type { Producer } from '@/lib/types'
+import type { Producer, PdvLocation } from '@/lib/types'
 import type { RentalWithProducer } from '@/components/equipamentos/EquipamentosClient'
 
 export default async function EquipamentosPage() {
@@ -9,7 +9,7 @@ export default async function EquipamentosPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const [{ data: rentals }, { data: producers }] = await Promise.all([
+  const [{ data: rentals }, { data: producers }, { data: pdvs }] = await Promise.all([
     supabase
       .from('equipment_rentals')
       .select('*, producers(id, full_name)')
@@ -18,6 +18,10 @@ export default async function EquipamentosPage() {
       .from('producers')
       .select('*')
       .order('full_name'),
+    supabase
+      .from('pdv_locations')
+      .select('*')
+      .order('name', { ascending: true }),
   ])
 
   return (
@@ -25,12 +29,13 @@ export default async function EquipamentosPage() {
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Equipamentos</h1>
         <p className="text-sm text-gray-500 mt-1">
-          Contratos de aluguel de equipamentos por produtor — cobranças geradas automaticamente no último dia do mês
+          Contratos de aluguel por produtor e pontos de venda físicos — cobranças geradas automaticamente no último dia do mês
         </p>
       </div>
       <EquipamentosClient
         rentals={(rentals ?? []) as RentalWithProducer[]}
         producers={(producers ?? []) as Producer[]}
+        pdvs={(pdvs ?? []) as PdvLocation[]}
       />
     </div>
   )

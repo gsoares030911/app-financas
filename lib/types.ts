@@ -314,6 +314,7 @@ export type PlatformCategory =
   | 'taxa_cartao'
   | 'impostos'
   | 'outros_despesa'
+  | 'aluguel_pdv'
 
 export const PLATFORM_CATEGORY_LABELS: Record<PlatformCategory, string> = {
   taxa_evento: 'Taxa de Evento',
@@ -326,14 +327,45 @@ export const PLATFORM_CATEGORY_LABELS: Record<PlatformCategory, string> = {
   taxa_cartao: 'Taxa de Cartão',
   impostos: 'Impostos',
   outros_despesa: 'Outras Despesas',
+  aluguel_pdv: 'Aluguel PDV',
 }
 
 export const PLATFORM_REVENUE_CATEGORIES: PlatformCategory[] = [
   'taxa_evento', 'publicidade', 'servicos', 'outros_receita',
 ]
 export const PLATFORM_EXPENSE_CATEGORIES: PlatformCategory[] = [
-  'infraestrutura', 'marketing', 'pessoal', 'taxa_cartao', 'impostos', 'outros_despesa',
+  'infraestrutura', 'marketing', 'pessoal', 'taxa_cartao', 'impostos', 'outros_despesa', 'aluguel_pdv',
 ]
+
+// =============================================
+// Pontos de Venda Físicos
+// =============================================
+
+export interface PdvLocation {
+  id: string
+  name: string
+  store_name: string
+  address: string | null
+  phone: string | null
+  monthly_cost: number
+  billing_day: number
+  is_bonificada: boolean
+  is_active: boolean
+  notes: string | null
+  created_at: string
+}
+
+export interface PdvLocationFormData {
+  name: string
+  store_name: string
+  address: string
+  phone: string
+  monthly_cost: number | string
+  billing_day: number | string
+  is_bonificada: boolean
+  is_active: boolean
+  notes: string
+}
 
 export interface PlatformEntry {
   id: string
