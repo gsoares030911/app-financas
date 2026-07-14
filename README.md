@@ -38,16 +38,34 @@ Sistema de gestão financeira da plataforma Bilheteria Express, desenvolvido com
 - Documento imprimível por OP com dados do produtor, eventos e conta corrente
 
 ### Equipamentos
-- Lista global de todos os contratos de aluguel de equipamentos de todos os produtores
-- **Código automático** (`EQ-001`, `EQ-002`…) gerado no cadastro; busca por código na listagem
-- **Busca por produtor** com autocomplete — digita o nome, seleciona na lista
-- Cadastro vincula o equipamento ao produtor diretamente (sem precisar entrar no extrato)
+Página `/dashboard/equipamentos` com duas abas:
+
+**Aba — Equipamentos de Produtor**
+- Lista global de todos os contratos de aluguel vinculados a produtores
+- **Código automático** (`EQ-001`, `EQ-002`…) gerado no cadastro; busca por código e por produtor (autocomplete)
 - Aba dentro de cada produtor mantida para visualização contextual
-- **Cobrança automática**: Vercel Cron Job roda todo último dia do mês e gera automaticamente um débito `aluguel_equipamento` para cada contrato ativo não cobrado no mês — zero intervenção manual
-  - Anti-duplicata por `reference_month`: nunca gera duas cobranças do mesmo mês
-  - Trava de devolução: desativar o contrato (`is_active = false`) ou preencher `Fim do Contrato` impede a cobrança do mês seguinte; mês corrente é cobrado integralmente
-  - Botão **"Gerar cobranças do mês"** disponível como fallback manual na página global
-  - Cron configurado em `vercel.json`; requer variável de ambiente `CRON_SECRET` no Vercel
+- **Cobrança automática**: Cron Job roda no último dia do mês e gera débito `aluguel_equipamento` em `account_entries` para cada contrato ativo — zero intervenção manual
+  - Anti-duplicata por `reference_month`
+  - Trava: desativar contrato (`is_active = false`) ou marcar **Devolvida à Rede** impede cobranças futuras
+  - Botão manual **"Gerar cobranças do mês"** disponível como fallback
+
+**Aba — Pontos de Venda**
+- Cadastro de PDVs físicos em lojas parceiras (custo pago pela plataforma, não pelo produtor)
+- Campos: nome, loja parceira, endereço, **telefone** (para futuras notificações SMS/WhatsApp), custo mensal, dia de cobrança
+- **Locação bonificada**: checkbox zera o custo e oculta campos de valor — PDV gratuito não gera despesa
+- Custo mensal gera despesa `aluguel_pdv` em `platform_entries` — aparece no P&L da BE
+- **Cobrança automática**: mesmo Cron Job do último dia do mês cobre PDVs não bonificados e ativos
+  - Anti-duplicata por `pdv_location_id + reference_month`
+  - Botão manual **"Gerar despesas do mês"** disponível como fallback
+
+**Status de máquinas (Equipamentos e PDVs)**
+- **Ativo** (verde) · **Inativo** (cinza) · **Dev. à Rede** (vermelho)
+- Marcar **"Máquina devolvida à Rede"** desativa o contrato automaticamente, registra a data de devolução e exibe badge vermelho — indica que o equipamento saiu do inventário (não está com o produtor, nem no PDV, nem conosco)
+- Cron ignora automaticamente registros devolvidos à rede (pois `is_active = false`)
+
+**Infraestrutura**
+- Cron configurado em `vercel.json` (`0 6 28-31 * *`); requer `CRON_SECRET` nas env vars do Vercel
+- Tabelas: `equipment_rentals` (produtores) e `pdv_locations` (BE); ambas com `returned_to_network + returned_at`
 
 ### Bilheteria Express (P&L da Plataforma)
 - Importação de dados via API externa por período com histórico de importações (chips clicáveis)
