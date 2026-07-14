@@ -59,9 +59,10 @@ Página `/dashboard/equipamentos` com duas abas:
   - Botão manual **"Gerar despesas do mês"** disponível como fallback
 
 **Status de máquinas (Equipamentos e PDVs)**
-- **Ativo** (verde) · **Inativo** (cinza) · **Dev. à Rede** (vermelho)
-- Marcar **"Máquina devolvida à Rede"** desativa o contrato automaticamente, registra a data de devolução e exibe badge vermelho — indica que o equipamento saiu do inventário (não está com o produtor, nem no PDV, nem conosco)
-- Cron ignora automaticamente registros devolvidos à rede (pois `is_active = false`)
+- **Ativo** (verde) · **Inativo** (cinza) · **Dev. à Operadora** (vermelho)
+- Marcar **"Máquina devolvida à Operadora"** desativa o contrato automaticamente, registra a data de devolução e exibe badge vermelho — indica que o equipamento saiu do inventário (não está com o produtor, nem no PDV, nem conosco)
+- Cron ignora automaticamente registros devolvidos à operadora (pois `is_active = false`)
+- **Chips de filtro clicáveis** na barra acima de cada tabela: Todos · Ativos · Inativos · Dev. à Operadora (+ Bonificadas na aba PDV) — seleção destaca o chip e filtra a tabela instantaneamente
 
 **Infraestrutura**
 - Cron configurado em `vercel.json` (`0 6 28-31 * *`); requer `CRON_SECRET` nas env vars do Vercel

@@ -17,6 +17,8 @@ export interface RentalWithProducer extends EquipmentRental {
 }
 
 type Tab = 'equipamentos' | 'pdv'
+type EquipFilter = 'todos' | 'ativo' | 'inativo' | 'devolvido'
+type PdvFilter = 'todos' | 'ativo' | 'inativo' | 'bonificada' | 'devolvido'
 
 interface Props {
   rentals: RentalWithProducer[]
@@ -36,12 +38,14 @@ export default function EquipamentosClient({ rentals: initialRentals, producers,
   // Equipamentos state
   const [searchProducer, setSearchProducer] = useState('')
   const [searchCode, setSearchCode] = useState('')
+  const [equipFilter, setEquipFilter] = useState<EquipFilter>('todos')
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editing, setEditing] = useState<EquipmentRental | null>(null)
   const [generatingCharges, setGeneratingCharges] = useState(false)
 
   // PDV state
   const [searchPdv, setSearchPdv] = useState('')
+  const [pdvFilter, setPdvFilter] = useState<PdvFilter>('todos')
   const [pdvDialogOpen, setPdvDialogOpen] = useState(false)
   const [editingPdv, setEditingPdv] = useState<PdvLocation | null>(null)
   const [generatingPdvCharges, setGeneratingPdvCharges] = useState(false)
@@ -51,17 +55,26 @@ export default function EquipamentosClient({ rentals: initialRentals, producers,
       const producerName = r.producers?.full_name ?? ''
       const matchProducer = producerName.toLowerCase().includes(searchProducer.toLowerCase())
       const matchCode = (r.equipment_code ?? '').toLowerCase().includes(searchCode.toLowerCase())
-      return matchProducer && matchCode
+      if (!matchProducer || !matchCode) return false
+      if (equipFilter === 'ativo') return r.is_active && !r.returned_to_network
+      if (equipFilter === 'inativo') return !r.is_active && !r.returned_to_network
+      if (equipFilter === 'devolvido') return r.returned_to_network
+      return true
     })
-  }, [initialRentals, searchProducer, searchCode])
+  }, [initialRentals, searchProducer, searchCode, equipFilter])
 
   const filteredPdvs = useMemo(() => {
     const q = searchPdv.toLowerCase()
-    return initialPdvs.filter(p =>
-      p.name.toLowerCase().includes(q) ||
-      p.store_name.toLowerCase().includes(q)
-    )
-  }, [initialPdvs, searchPdv])
+    return initialPdvs.filter(p => {
+      const matchSearch = p.name.toLowerCase().includes(q) || p.store_name.toLowerCase().includes(q)
+      if (!matchSearch) return false
+      if (pdvFilter === 'ativo') return p.is_active && !p.returned_to_network
+      if (pdvFilter === 'inativo') return !p.is_active && !p.returned_to_network
+      if (pdvFilter === 'bonificada') return p.is_bonificada
+      if (pdvFilter === 'devolvido') return p.returned_to_network
+      return true
+    })
+  }, [initialPdvs, searchPdv, pdvFilter])
 
   // ── Equipamentos handlers ──────────────────────────────────────
 
@@ -190,6 +203,22 @@ export default function EquipamentosClient({ rentals: initialRentals, producers,
     }
   }
 
+  // ── Counts (always from full list, not filtered) ──────────────
+  const equipCounts = useMemo(() => ({
+    total: initialRentals.length,
+    ativos: initialRentals.filter(r => r.is_active && !r.returned_to_network).length,
+    inativos: initialRentals.filter(r => !r.is_active && !r.returned_to_network).length,
+    devolvidos: initialRentals.filter(r => r.returned_to_network).length,
+  }), [initialRentals])
+
+  const pdvCounts = useMemo(() => ({
+    total: initialPdvs.length,
+    ativos: initialPdvs.filter(p => p.is_active && !p.returned_to_network).length,
+    inativos: initialPdvs.filter(p => !p.is_active && !p.returned_to_network).length,
+    bonificadas: initialPdvs.filter(p => p.is_bonificada).length,
+    devolvidos: initialPdvs.filter(p => p.returned_to_network).length,
+  }), [initialPdvs])
+
   // ── Render ────────────────────────────────────────────────────
 
   return (
@@ -241,12 +270,36 @@ export default function EquipamentosClient({ rentals: initialRentals, producers,
             </Button>
           </div>
 
-          <div className="flex gap-3 text-sm text-gray-500">
-            <span>{filteredRentals.length} contrato(s)</span>
-            <span>·</span>
-            <span className="text-green-600">{filteredRentals.filter(r => r.is_active).length} ativo(s)</span>
-            <span>·</span>
-            <span>{filteredRentals.filter(r => !r.is_active).length} inativo(s)</span>
+          {/* Filter chips — Equipamentos */}
+          <div className="flex flex-wrap gap-2 text-sm">
+            {(
+              [
+                { key: 'todos',    label: `Todos (${equipCounts.total})` },
+                { key: 'ativo',    label: `Ativos (${equipCounts.ativos})`,                 activeClass: 'bg-green-600 text-white border-green-600',   inactiveClass: 'text-green-700 border-green-300 hover:bg-green-50' },
+                { key: 'inativo',  label: `Inativos (${equipCounts.inativos})`,             activeClass: 'bg-gray-500 text-white border-gray-500',     inactiveClass: 'text-gray-600 border-gray-300 hover:bg-gray-50' },
+                { key: 'devolvido',label: `Dev. à Operadora (${equipCounts.devolvidos})`,   activeClass: 'bg-red-600 text-white border-red-600',       inactiveClass: 'text-red-700 border-red-300 hover:bg-red-50' },
+              ] as { key: EquipFilter; label: string; activeClass?: string; inactiveClass?: string }[]
+            ).map(chip => {
+              const isActive = equipFilter === chip.key
+              return (
+                <button
+                  key={chip.key}
+                  onClick={() => setEquipFilter(chip.key)}
+                  className={`px-3 py-1 rounded-full border font-medium transition-colors ${
+                    isActive
+                      ? (chip.activeClass ?? 'bg-blue-600 text-white border-blue-600')
+                      : (chip.inactiveClass ?? 'text-blue-700 border-blue-300 hover:bg-blue-50')
+                  }`}
+                >
+                  {chip.label}
+                </button>
+              )
+            })}
+            {filteredRentals.length !== initialRentals.length && (
+              <span className="self-center text-xs text-gray-400">
+                mostrando {filteredRentals.length}
+              </span>
+            )}
           </div>
 
           <div className="overflow-x-auto rounded-lg border bg-white">
@@ -279,7 +332,7 @@ export default function EquipamentosClient({ rentals: initialRentals, producers,
                     <td className="px-4 py-3 text-gray-500">{r.end_date ? new Date(r.end_date + 'T12:00:00').toLocaleDateString('pt-BR') : '—'}</td>
                     <td className="px-4 py-3 text-center">
                       {r.returned_to_network
-                        ? <Badge className="bg-red-100 text-red-700 border-0 gap-1"><RotateCcw className="h-3 w-3" />Dev. à Rede</Badge>
+                        ? <Badge className="bg-red-100 text-red-700 border-0 gap-1"><RotateCcw className="h-3 w-3" />Dev. à Operadora</Badge>
                         : r.is_active
                           ? <Badge className="bg-green-100 text-green-700 border-0 gap-1"><CheckCircle className="h-3 w-3" />Ativo</Badge>
                           : <Badge className="bg-gray-100 text-gray-500 border-0 gap-1"><XCircle className="h-3 w-3" />Inativo</Badge>}
@@ -316,12 +369,37 @@ export default function EquipamentosClient({ rentals: initialRentals, producers,
             </Button>
           </div>
 
-          <div className="flex gap-3 text-sm text-gray-500">
-            <span>{filteredPdvs.length} PDV(s)</span>
-            <span>·</span>
-            <span className="text-green-600">{filteredPdvs.filter(p => p.is_active).length} ativo(s)</span>
-            <span>·</span>
-            <span className="text-blue-600">{filteredPdvs.filter(p => p.is_bonificada).length} bonificado(s)</span>
+          {/* Filter chips — PDVs */}
+          <div className="flex flex-wrap gap-2 text-sm">
+            {(
+              [
+                { key: 'todos',     label: `Todos (${pdvCounts.total})` },
+                { key: 'ativo',     label: `Ativos (${pdvCounts.ativos})`,                  activeClass: 'bg-green-600 text-white border-green-600',   inactiveClass: 'text-green-700 border-green-300 hover:bg-green-50' },
+                { key: 'inativo',   label: `Inativos (${pdvCounts.inativos})`,              activeClass: 'bg-gray-500 text-white border-gray-500',     inactiveClass: 'text-gray-600 border-gray-300 hover:bg-gray-50' },
+                { key: 'bonificada',label: `Bonificadas (${pdvCounts.bonificadas})`,        activeClass: 'bg-blue-600 text-white border-blue-600',     inactiveClass: 'text-blue-700 border-blue-300 hover:bg-blue-50' },
+                { key: 'devolvido', label: `Dev. à Operadora (${pdvCounts.devolvidos})`,    activeClass: 'bg-red-600 text-white border-red-600',       inactiveClass: 'text-red-700 border-red-300 hover:bg-red-50' },
+              ] as { key: PdvFilter; label: string; activeClass?: string; inactiveClass?: string }[]
+            ).map(chip => {
+              const isActive = pdvFilter === chip.key
+              return (
+                <button
+                  key={chip.key}
+                  onClick={() => setPdvFilter(chip.key)}
+                  className={`px-3 py-1 rounded-full border font-medium transition-colors ${
+                    isActive
+                      ? (chip.activeClass ?? 'bg-blue-600 text-white border-blue-600')
+                      : (chip.inactiveClass ?? 'text-blue-700 border-blue-300 hover:bg-blue-50')
+                  }`}
+                >
+                  {chip.label}
+                </button>
+              )
+            })}
+            {filteredPdvs.length !== initialPdvs.length && (
+              <span className="self-center text-xs text-gray-400">
+                mostrando {filteredPdvs.length}
+              </span>
+            )}
           </div>
 
           <div className="overflow-x-auto rounded-lg border bg-white">
@@ -356,7 +434,7 @@ export default function EquipamentosClient({ rentals: initialRentals, producers,
                     <td className="px-4 py-3 text-center text-gray-600">{p.is_bonificada ? '—' : p.billing_day}</td>
                     <td className="px-4 py-3 text-center">
                       {p.returned_to_network
-                        ? <Badge className="bg-red-100 text-red-700 border-0 gap-1"><RotateCcw className="h-3 w-3" />Dev. à Rede</Badge>
+                        ? <Badge className="bg-red-100 text-red-700 border-0 gap-1"><RotateCcw className="h-3 w-3" />Dev. à Operadora</Badge>
                         : p.is_active
                           ? <Badge className="bg-green-100 text-green-700 border-0 gap-1"><CheckCircle className="h-3 w-3" />Ativo</Badge>
                           : <Badge className="bg-gray-100 text-gray-500 border-0 gap-1"><XCircle className="h-3 w-3" />Inativo</Badge>}

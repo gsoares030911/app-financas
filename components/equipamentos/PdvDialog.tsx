@@ -244,7 +244,7 @@ export default function PdvDialog({ open, onOpenChange, pdv }: Props) {
                 className="rounded w-4 h-4 accent-red-600"
               />
               <div>
-                <p className="text-sm font-medium text-red-700">Máquina devolvida à Rede</p>
+                <p className="text-sm font-medium text-red-700">Máquina devolvida à Operadora</p>
                 <p className="text-xs text-red-400">O equipamento não está mais em nosso poder — desativa automaticamente</p>
               </div>
             </label>
