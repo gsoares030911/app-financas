@@ -255,7 +255,7 @@ export default function EquipamentosClient({ rentals: initialRentals, producers,
   }
 
   async function gerarCobrancasEquip() {
-    const active = initialRentals.filter(r => r.is_active)
+    const active = initialRentals.filter(r => r.is_active && !r.is_bonificada)
     if (active.length === 0) { toast.info('Nenhum contrato ativo.'); return }
     const now = new Date()
     const year = now.getFullYear()

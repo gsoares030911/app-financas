@@ -310,6 +310,7 @@ export interface EquipmentRental {
   start_date: string
   end_date: string | null
   is_active: boolean
+  is_bonificada: boolean
   returned_to_network: boolean
   returned_at: string | null
   notes: string | null
@@ -317,12 +318,12 @@ export interface EquipmentRental {
 }
 
 export interface EquipmentRentalFormData {
-  equipment_name: string
   monthly_amount: number | string
   billing_day: number | string
   start_date: string
   end_date: string
   is_active: boolean
+  is_bonificada: boolean
   returned_to_network: boolean
   returned_at: string
   notes: string

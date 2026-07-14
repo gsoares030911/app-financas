@@ -35,6 +35,7 @@ export async function GET(request: NextRequest) {
     .from('equipment_rentals')
     .select('id, producer_id, equipment_name, monthly_amount, billing_day')
     .eq('is_active', true)
+    .eq('is_bonificada', false)
 
   if (rentalsErr) {
     console.error('[cron] Error fetching rentals:', rentalsErr)

@@ -24,12 +24,12 @@ interface Props {
 const today = new Date().toISOString().split('T')[0]
 
 const EMPTY: EquipmentRentalFormData = {
-  equipment_name: '',
   monthly_amount: '',
   billing_day: '',
   start_date: today,
   end_date: '',
   is_active: true,
+  is_bonificada: false,
   returned_to_network: false,
   returned_at: '',
   notes: '',
@@ -68,12 +68,12 @@ export default function EquipmentRentalDialog({ open, onOpenChange, producerId, 
   useEffect(() => {
     if (rental) {
       setForm({
-        equipment_name: rental.equipment_name,
         monthly_amount: rental.monthly_amount,
         billing_day: rental.billing_day,
         start_date: rental.start_date,
         end_date: rental.end_date ?? '',
         is_active: rental.is_active,
+        is_bonificada: rental.is_bonificada,
         returned_to_network: rental.returned_to_network,
         returned_at: rental.returned_at ?? '',
         notes: rental.notes ?? '',
@@ -113,26 +113,41 @@ export default function EquipmentRentalDialog({ open, onOpenChange, producerId, 
     setShowDropdown(false)
   }
 
+  function handleBonificada(checked: boolean) {
+    setForm(prev => ({
+      ...prev,
+      is_bonificada: checked,
+      monthly_amount: checked ? 0 : '',
+    }))
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    const amount = Number(form.monthly_amount)
-    const day = Number(form.billing_day)
     const pid = standalone ? selectedProducerId : producerId
-
     if (standalone && !pid) { toast.error('Selecione um produtor'); return }
-    if (!form.equipment_name.trim()) { toast.error('Nome do equipamento é obrigatório'); return }
-    if (!amount || amount <= 0) { toast.error('Valor mensal deve ser maior que zero'); return }
+    if (!form.machine_id) { toast.error('Selecione uma máquina'); return }
+
+    const amount = form.is_bonificada ? 0 : Number(form.monthly_amount)
+    const day = Number(form.billing_day)
+
+    if (!form.is_bonificada && (!amount || amount <= 0)) { toast.error('Valor mensal deve ser maior que zero'); return }
     if (!day || day < 1 || day > 28) { toast.error('Dia de cobrança deve ser entre 1 e 28'); return }
+
+    const selectedMachine = machines?.find(m => m.id === form.machine_id)
+    const equipmentName = selectedMachine
+      ? `${selectedMachine.model} (${selectedMachine.serial_number})`
+      : 'Equipamento'
 
     setLoading(true)
     try {
       const payload = {
-        equipment_name: form.equipment_name.trim(),
+        equipment_name: equipmentName,
         monthly_amount: amount,
         billing_day: day,
         start_date: form.start_date,
         end_date: form.end_date || null,
         is_active: form.returned_to_network ? false : form.is_active,
+        is_bonificada: form.is_bonificada,
         returned_to_network: form.returned_to_network,
         returned_at: form.returned_at || null,
         notes: form.notes.trim() || null,
@@ -167,17 +182,14 @@ export default function EquipmentRentalDialog({ open, onOpenChange, producerId, 
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
 
+          {/* Produtor (standalone) */}
           {standalone && (
             <div className="space-y-2" ref={dropdownRef}>
               <Label>Produtor *</Label>
               <div className="relative">
                 <Input
                   value={producerSearch}
-                  onChange={e => {
-                    setProducerSearch(e.target.value)
-                    setSelectedProducerId('')
-                    setShowDropdown(true)
-                  }}
+                  onChange={e => { setProducerSearch(e.target.value); setSelectedProducerId(''); setShowDropdown(true) }}
                   onFocus={() => setShowDropdown(true)}
                   placeholder="Digite o nome do produtor..."
                   autoComplete="off"
@@ -185,9 +197,7 @@ export default function EquipmentRentalDialog({ open, onOpenChange, producerId, 
                 {showDropdown && filteredProducers.length > 0 && (
                   <div className="absolute z-50 w-full mt-1 bg-white border rounded-md shadow-lg max-h-48 overflow-y-auto">
                     {filteredProducers.map(p => (
-                      <button
-                        key={p.id}
-                        type="button"
+                      <button key={p.id} type="button"
                         className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 transition-colors"
                         onClick={() => selectProducer(p)}
                       >
@@ -200,77 +210,72 @@ export default function EquipmentRentalDialog({ open, onOpenChange, producerId, 
             </div>
           )}
 
-          {machines && machines.length > 0 && (
-            <div className="space-y-2">
-              <Label>Máquina (opcional)</Label>
-              <select
-                value={form.machine_id}
-                onChange={e => set('machine_id', e.target.value)}
-                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring"
-              >
-                <option value="">— Sem máquina vinculada —</option>
-                {machines.map(m => (
-                  <option key={m.id} value={m.id}>
-                    {m.serial_number} — {m.model} ({m.operator})
-                  </option>
-                ))}
-              </select>
+          {/* Máquina */}
+          <div className="space-y-2">
+            <Label>Máquina *</Label>
+            <select
+              value={form.machine_id}
+              onChange={e => set('machine_id', e.target.value)}
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring"
+              required
+            >
+              <option value="">— Selecione uma máquina —</option>
+              {(machines ?? []).map(m => (
+                <option key={m.id} value={m.id}>
+                  {m.serial_number} — {m.model} ({m.operator})
+                </option>
+              ))}
+            </select>
+            {(!machines || machines.length === 0) && (
+              <p className="text-xs text-amber-600">Cadastre máquinas na aba Máquinas primeiro.</p>
+            )}
+          </div>
+
+          {/* Bonificada */}
+          <label className="flex items-center gap-3 p-3 rounded-lg border border-dashed border-gray-300 cursor-pointer select-none hover:bg-gray-50 transition-colors">
+            <input
+              type="checkbox"
+              checked={form.is_bonificada}
+              onChange={e => handleBonificada(e.target.checked)}
+              className="rounded w-4 h-4 accent-blue-600"
+            />
+            <div>
+              <p className="text-sm font-medium text-gray-800">Locação bonificada</p>
+              <p className="text-xs text-gray-500">O produtor não paga pelo equipamento — custo zerado, sem cobrança automática</p>
+            </div>
+          </label>
+
+          {!form.is_bonificada && (
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label>Valor Mensal (R$) *</Label>
+                <Input
+                  type="number" min="0.01" step="0.01"
+                  value={form.monthly_amount}
+                  onChange={e => set('monthly_amount', e.target.value)}
+                  placeholder="0,00" required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Dia de Cobrança (1–28) *</Label>
+                <Input
+                  type="number" min="1" max="28"
+                  value={form.billing_day}
+                  onChange={e => set('billing_day', e.target.value)}
+                  placeholder="15" required
+                />
+              </div>
             </div>
           )}
-
-          <div className="space-y-2">
-            <Label>Nome do Equipamento *</Label>
-            <Input
-              value={form.equipment_name}
-              onChange={e => set('equipment_name', e.target.value)}
-              placeholder="Ex: Som P.A. 5000W"
-              required
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-2">
-              <Label>Valor Mensal (R$) *</Label>
-              <Input
-                type="number"
-                min="0.01"
-                step="0.01"
-                value={form.monthly_amount}
-                onChange={e => set('monthly_amount', e.target.value)}
-                placeholder="0,00"
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Dia de Cobrança (1–28) *</Label>
-              <Input
-                type="number"
-                min="1"
-                max="28"
-                value={form.billing_day}
-                onChange={e => set('billing_day', e.target.value)}
-                placeholder="15"
-                required
-              />
-            </div>
-          </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
               <Label>Início do Contrato</Label>
-              <Input
-                type="date"
-                value={form.start_date}
-                onChange={e => set('start_date', e.target.value)}
-              />
+              <Input type="date" value={form.start_date} onChange={e => set('start_date', e.target.value)} />
             </div>
             <div className="space-y-2">
               <Label>Fim do Contrato (opcional)</Label>
-              <Input
-                type="date"
-                value={form.end_date}
-                onChange={e => set('end_date', e.target.value)}
-              />
+              <Input type="date" value={form.end_date} onChange={e => set('end_date', e.target.value)} />
             </div>
           </div>
 
@@ -285,7 +290,7 @@ export default function EquipmentRentalDialog({ open, onOpenChange, producerId, 
             Contrato ativo (gera cobrança automática no fim do mês)
           </label>
 
-          {/* Devolvida à Rede */}
+          {/* Devolvida à Operadora */}
           <div className="space-y-2 pt-1 border-t">
             <label className="flex items-center gap-3 p-3 rounded-lg border border-dashed border-red-200 cursor-pointer select-none hover:bg-red-50 transition-colors">
               <input
@@ -310,22 +315,14 @@ export default function EquipmentRentalDialog({ open, onOpenChange, producerId, 
             {form.returned_to_network && (
               <div className="space-y-1">
                 <Label className="text-xs text-gray-500">Data de devolução</Label>
-                <Input
-                  type="date"
-                  value={form.returned_at}
-                  onChange={e => set('returned_at', e.target.value)}
-                />
+                <Input type="date" value={form.returned_at} onChange={e => set('returned_at', e.target.value)} />
               </div>
             )}
           </div>
 
           <div className="space-y-2">
             <Label>Observações</Label>
-            <Input
-              value={form.notes}
-              onChange={e => set('notes', e.target.value)}
-              placeholder="Notas do contrato..."
-            />
+            <Input value={form.notes} onChange={e => set('notes', e.target.value)} placeholder="Notas do contrato..." />
           </div>
 
           <DialogFooter>
