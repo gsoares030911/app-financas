@@ -88,12 +88,6 @@ export default function LoginPage() {
                 {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Entrar'}
               </Button>
             </form>
-            <p className="text-center text-sm text-gray-500 mt-4">
-              Não tem conta?{' '}
-              <Link href="/register" className="text-blue-600 font-medium hover:underline">
-                Criar conta grátis
-              </Link>
-            </p>
           </CardContent>
         </Card>
       </div>
