@@ -63,6 +63,7 @@ Página `/dashboard/equipamentos` com duas abas:
 - Marcar **"Máquina devolvida à Operadora"** desativa o contrato automaticamente, registra a data de devolução e exibe badge vermelho — indica que o equipamento saiu do inventário (não está com o produtor, nem no PDV, nem conosco)
 - Cron ignora automaticamente registros devolvidos à operadora (pois `is_active = false`)
 - **Chips de filtro clicáveis** na barra acima de cada tabela: Todos · Ativos · Inativos · Dev. à Operadora (+ Bonificadas na aba PDV) — seleção destaca o chip e filtra a tabela instantaneamente
+- **Ordenação por coluna**: clique em qualquer cabeçalho para ordenar crescente/decrescente (ícone ⇅/↑/↓); Equipamentos: Código, Equipamento, Produtor, Valor/Mês, Dia Cob., Início, Fim, Status; PDVs: PDV, Loja Parceira, Telefone, Custo/Mês, Dia Cob., Status
 
 **Infraestrutura**
 - Cron configurado em `vercel.json` (`0 6 28-31 * *`); requer `CRON_SECRET` nas env vars do Vercel
