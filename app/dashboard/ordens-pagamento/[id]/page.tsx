@@ -17,7 +17,6 @@ export default async function OrdemPagamentoDetailPage({
     .from('payment_orders')
     .select('*')
     .eq('id', id)
-    .eq('user_id', user.id)
     .single()
 
   if (!order) notFound()
