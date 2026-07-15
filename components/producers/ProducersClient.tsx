@@ -1,9 +1,9 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Plus, Search, Users, TrendingUp, TrendingDown, ChevronRight, FileText, Loader2, CalendarClock } from 'lucide-react'
+import { Plus, Search, Users, TrendingUp, TrendingDown, ChevronRight, FileText, Loader2, CalendarClock, Upload } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent } from '@/components/ui/card'
@@ -14,6 +14,7 @@ import { formatCurrency } from '@/lib/utils/format'
 import type { Producer, AccountEntry } from '@/lib/types'
 import type { DateRange } from 'react-day-picker'
 import ProducerForm from './ProducerForm'
+import * as XLSX from 'xlsx'
 
 interface ProducerWithBalance {
   producer: Producer
@@ -35,14 +36,19 @@ interface Props {
   userId: string
 }
 
+type BalanceFilter = 'todos' | 'a_pagar' | 'devendo' | 'zerado'
+
 export default function ProducersClient({ producers, entries, events, paidOrders, emittedEventIds, userId }: Props) {
   const router = useRouter()
   const supabase = createClient()
   const [search, setSearch] = useState('')
+  const [balanceFilter, setBalanceFilter] = useState<BalanceFilter>('todos')
   const [formOpen, setFormOpen] = useState(false)
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined)
   const [excluded, setExcluded] = useState<Set<string>>(new Set())
   const [emitting, setEmitting] = useState(false)
+  const [importingProducers, setImportingProducers] = useState(false)
+  const importProducerRef = useRef<HTMLInputElement>(null)
 
   const periodActive = !!dateRange?.from
   // Eventos já cobertos por alguma OP existente — não entram no lote
@@ -60,14 +66,19 @@ export default function ProducersClient({ producers, entries, events, paidOrders
   }, [producers, entries, paidOrders])
 
   const filteredBalance = useMemo(() => {
-    if (!search.trim()) return producersWithBalance
     const q = search.toLowerCase()
-    return producersWithBalance.filter(({ producer }) =>
-      producer.full_name.toLowerCase().includes(q) ||
-      producer.email?.toLowerCase().includes(q) ||
-      producer.phone?.includes(q)
-    )
-  }, [producersWithBalance, search])
+    return producersWithBalance.filter(({ producer, balance }) => {
+      const matchSearch = !q ||
+        producer.full_name.toLowerCase().includes(q) ||
+        producer.email?.toLowerCase().includes(q) ||
+        producer.phone?.includes(q)
+      if (!matchSearch) return false
+      if (balanceFilter === 'a_pagar') return balance > 0
+      if (balanceFilter === 'devendo') return balance < 0
+      if (balanceFilter === 'zerado') return balance === 0
+      return true
+    })
+  }, [producersWithBalance, search, balanceFilter])
 
   const totalToReceive = producersWithBalance.filter(p => p.balance > 0).reduce((s, p) => s + p.balance, 0)
   const totalOwed = producersWithBalance.filter(p => p.balance < 0).reduce((s, p) => s + Math.abs(p.balance), 0)
@@ -128,6 +139,71 @@ export default function ProducersClient({ producers, entries, events, paidOrders
     })
   }
 
+  async function handleImportProducersFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (importProducerRef.current) importProducerRef.current.value = ''
+    if (!file) return
+
+    setImportingProducers(true)
+    try {
+      const buffer = await file.arrayBuffer()
+      const wb = XLSX.read(buffer, { type: 'array' })
+      const ws = wb.Sheets[wb.SheetNames[0]]
+      type Row = { nome?: string; email?: string; telefone?: string; pix?: string; banco?: string; agencia?: string; conta?: string; observacoes?: string }
+      const rows = XLSX.utils.sheet_to_json<Row>(ws, { defval: null })
+
+      const parsed = rows
+        .map(r => ({ name: String(r.nome ?? '').trim(), email: String(r.email ?? '').trim() || null, phone: String(r.telefone ?? '').trim() || null, pix_key: String(r.pix ?? '').trim() || null, bank_name: String(r.banco ?? '').trim() || null, bank_agency: String(r.agencia ?? '').trim() || null, bank_account: String(r.conta ?? '').trim() || null, notes: String(r.observacoes ?? '').trim() || null }))
+        .filter(r => r.name)
+
+      if (parsed.length === 0) {
+        toast.error('Nenhum produtor encontrado. Verifique se a coluna "nome" existe.')
+        return
+      }
+
+      const { data: existing } = await supabase
+        .from('producers')
+        .select('full_name')
+        .in('full_name', parsed.map(p => p.name))
+      const existingSet = new Set((existing ?? []).map(e => e.full_name.toLowerCase()))
+
+      const toInsert = parsed.filter(p => !existingSet.has(p.name.toLowerCase()))
+      const skipped = parsed.length - toInsert.length
+
+      if (toInsert.length === 0) {
+        toast.info(`Todos os ${parsed.length} produtores já estão cadastrados.`)
+        return
+      }
+
+      const msg = skipped > 0
+        ? `Importar ${toInsert.length} produtor(es) novo(s)? (${skipped} já cadastrado(s) serão ignorados)`
+        : `Importar ${toInsert.length} produtor(es)?`
+      if (!confirm(msg)) return
+
+      const inserts = toInsert.map(p => ({
+        user_id: userId,
+        full_name: p.name,
+        email: p.email,
+        phone: p.phone,
+        pix_key: p.pix_key,
+        bank_name: p.bank_name,
+        bank_agency: p.bank_agency,
+        bank_account: p.bank_account,
+        notes: p.notes,
+      }))
+
+      const { error } = await supabase.from('producers').insert(inserts)
+      if (error) throw error
+
+      toast.success(`${toInsert.length} produtor(es) importado(s)!${skipped > 0 ? ` (${skipped} ignorado(s))` : ''}`)
+      router.refresh()
+    } catch (err: unknown) {
+      toast.error((err as Error).message ?? 'Erro ao importar Excel')
+    } finally {
+      setImportingProducers(false)
+    }
+  }
+
   async function emitirLote() {
     if (toEmit.length === 0) { toast.error('Nenhum produtor selecionado'); return }
     if (!confirm(`Emitir ${toEmit.length} ordem(ns) de pagamento — total ${formatCurrency(totalToEmit)}?`)) return
@@ -178,10 +254,23 @@ export default function ProducersClient({ producers, entries, events, paidOrders
             {producers.length} produtor{producers.length !== 1 ? 'es' : ''} cadastrado{producers.length !== 1 ? 's' : ''}
           </p>
         </div>
-        <Button onClick={() => setFormOpen(true)}>
-          <Plus className="h-4 w-4 mr-2" />
-          Novo Produtor
-        </Button>
+        <div className="flex gap-2">
+          <input
+            ref={importProducerRef}
+            type="file"
+            accept=".xlsx,.xls"
+            className="hidden"
+            onChange={handleImportProducersFile}
+          />
+          <Button variant="outline" onClick={() => importProducerRef.current?.click()} disabled={importingProducers} className="gap-2">
+            <Upload className="h-4 w-4" />
+            {importingProducers ? 'Importando...' : 'Importar Excel'}
+          </Button>
+          <Button onClick={() => setFormOpen(true)}>
+            <Plus className="h-4 w-4 mr-2" />
+            Novo Produtor
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -281,6 +370,28 @@ export default function ProducersClient({ producers, entries, events, paidOrders
           className="pl-9"
         />
       </div>
+
+      {!periodActive && (
+        <div className="flex flex-wrap gap-2 text-sm">
+          {(
+            [
+              { key: 'todos',    label: `Todos (${producersWithBalance.length})` },
+              { key: 'a_pagar', label: `A pagar (${producersWithBalance.filter(p => p.balance > 0).length})`,  activeClass: 'bg-green-600 text-white border-green-600',  inactiveClass: 'text-green-700 border-green-300 hover:bg-green-50' },
+              { key: 'devendo',  label: `Devendo (${producersWithBalance.filter(p => p.balance < 0).length})`, activeClass: 'bg-red-600 text-white border-red-600',      inactiveClass: 'text-red-700 border-red-300 hover:bg-red-50' },
+              { key: 'zerado',   label: `Zerado (${producersWithBalance.filter(p => p.balance === 0).length})`,activeClass: 'bg-gray-500 text-white border-gray-500',    inactiveClass: 'text-gray-600 border-gray-300 hover:bg-gray-50' },
+            ] as { key: BalanceFilter; label: string; activeClass?: string; inactiveClass?: string }[]
+          ).map(chip => {
+            const isActive = balanceFilter === chip.key
+            return (
+              <button key={chip.key} onClick={() => setBalanceFilter(chip.key)}
+                className={`px-3 py-1 rounded-full border font-medium transition-colors ${isActive ? (chip.activeClass ?? 'bg-blue-600 text-white border-blue-600') : (chip.inactiveClass ?? 'text-blue-700 border-blue-300 hover:bg-blue-50')}`}
+              >
+                {chip.label}
+              </button>
+            )
+          })}
+        </div>
+      )}
 
       {periodActive ? (
         // ───── Tabela por período (com seleção para o lote) ─────
