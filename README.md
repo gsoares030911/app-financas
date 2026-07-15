@@ -36,6 +36,7 @@ Sistema de gestão financeira da plataforma Bilheteria Express, desenvolvido com
   - Detecção automática do tipo de chave PIX (CPF/CNPJ, e-mail, telefone, aleatória)
   - Config da empresa pagadora salva no Supabase (compartilhada entre usuários/máquinas)
 - Documento imprimível por OP com dados do produtor, eventos e conta corrente
+  - Coluna **Despesas** na tabela de eventos: soma real de todos os débitos (`account_entries`) vinculados ao evento — inclui taxa cartão/PIX, taxa de impressão, voucher/dinheiro e demais débitos (não apenas a taxa da plataforma)
 
 ### Equipamentos
 Página `/dashboard/equipamentos` com duas abas:
@@ -58,6 +59,13 @@ Página `/dashboard/equipamentos` com duas abas:
   - Anti-duplicata por `pdv_location_id + reference_month`
   - Botão manual **"Gerar despesas do mês"** disponível como fallback
 
+**Aba — Máquinas**
+- Rastreamento físico de cada equipamento: **No escritório** · **Com Produtor** · **Devolvida**
+  - Status derivado em 3 camadas: `returned_to_network` na máquina (prioridade máxima) → contrato de aluguel/PDV ativo sem devolução → no escritório
+  - `is_active` controla faturamento; `returned_to_network` controla localização física (independentes)
+- **Devolução em massa**: checkboxes por linha + "Devolver Selecionadas (N)" — marca as máquinas como devolvidas e encerra automaticamente todos os contratos de aluguel e PDVs vinculados (mesmo bonificados)
+- **Seletor de máquina filtrado**: ao cadastrar/editar contrato, só aparecem as máquinas com status "No escritório" (ou a já vinculada ao contrato atual) — impede vincular a mesma máquina a dois produtores
+
 **Status de máquinas (Equipamentos e PDVs)**
 - **Ativo** (verde) · **Inativo** (cinza) · **Dev. à Operadora** (vermelho)
 - Marcar **"Máquina devolvida à Operadora"** desativa o contrato automaticamente, registra a data de devolução e exibe badge vermelho — indica que o equipamento saiu do inventário (não está com o produtor, nem no PDV, nem conosco)
@@ -67,7 +75,7 @@ Página `/dashboard/equipamentos` com duas abas:
 
 **Infraestrutura**
 - Cron configurado em `vercel.json` (`0 6 28-31 * *`); requer `CRON_SECRET` nas env vars do Vercel
-- Tabelas: `equipment_rentals` (produtores) e `pdv_locations` (BE); ambas com `returned_to_network + returned_at`
+- Tabelas: `equipment_rentals` (produtores), `pdv_locations` (BE) e `machines` (inventário físico); todas com `returned_to_network + returned_at`
 
 ### Bilheteria Express (P&L da Plataforma)
 - Importação de dados via API externa por período com histórico de importações (chips clicáveis)
@@ -95,12 +103,18 @@ Página `/dashboard/equipamentos` com duas abas:
 - Papéis: `super_admin`, `admin`, `financeiro_bilheteria`, `producer`, `financeiro_produtor`
   - `financeiro_bilheteria`: acesso a Dashboard, Produtores, OPs e Bilheteria (sem Configurações/Logs)
 
+## Interface
+
+- **Máscara de moeda brasileira** em todos os campos de dinheiro (componente `CurrencyInput`): comportamento estilo ATM — dígitos preenchem da direita para a esquerda, últimos 2 são centavos. Ex: digitar `9000` exibe `R$ 90,00` em tempo real. Prefixo `R$` fixo, `inputMode="numeric"` para teclado numérico no celular.
+
 ## Segurança
 - Middleware Next.js (`middleware.ts`) protege todas as rotas `/dashboard` e redireciona usuários não autenticados
 - Server Actions com verificação dupla de autenticação + papel
 - `SUPABASE_SERVICE_ROLE_KEY` usado exclusivamente server-side
 - Proteção dupla (UI + servidor) contra alteração/exclusão do Super Admin
 - Validação de formato de datas na rota da API externa
+- Registro público bloqueado: `/register` redireciona para `/login`; sign-up desativado no Supabase
+- Link "Criar conta grátis" removido da tela de login
 
 ## Tecnologias
 
