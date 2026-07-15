@@ -887,6 +887,11 @@ export default function EquipamentosClient({ rentals: initialRentals, producers,
                         {m.location_name && (
                           <span className="text-xs text-gray-500">{m.location_name}</span>
                         )}
+                        {m.status === 'devolvida' && m.returned_at && (
+                          <span className="text-xs text-gray-400">
+                            Devolvida em {new Date(m.returned_at + 'T12:00:00').toLocaleDateString('pt-BR')}
+                          </span>
+                        )}
                       </div>
                     </td>
                     <td className="px-4 py-3">
