@@ -60,6 +60,7 @@ Página `/dashboard/equipamentos` com duas abas:
   - Botão manual **"Gerar despesas do mês"** disponível como fallback
 
 **Aba — Máquinas**
+- **Importação via Excel**: botão "Importar Excel" abre seletor de arquivo `.xlsx`; colunas esperadas: `modelo` (serial) e `instalação` (data). Operadora padrão: `Rede`. Anti-duplicidade por `serial_number` — máquinas já cadastradas são ignoradas, exibindo contagem antes de confirmar.
 - Rastreamento físico de cada equipamento: **No escritório** · **Com Produtor** · **Devolvida**
   - Status derivado em 3 camadas: `returned_to_network` na máquina (prioridade máxima) → contrato de aluguel/PDV ativo sem devolução → no escritório
   - `is_active` controla faturamento; `returned_to_network` controla localização física (independentes)
