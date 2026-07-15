@@ -135,6 +135,42 @@ export default function MachineDialog({ open, onOpenChange, machine }: Props) {
             />
           </div>
 
+          {machine?.returned_to_network && (
+            <div className="rounded-lg border border-orange-200 bg-orange-50 px-4 py-3 flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium text-orange-800">Máquina marcada como devolvida</p>
+                <p className="text-xs text-orange-600 mt-0.5">Clique para desfazer e devolver ao inventário</p>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={loading}
+                className="border-orange-300 text-orange-700 hover:bg-orange-100 shrink-0"
+                onClick={async () => {
+                  if (!confirm('Reverter devolução? A máquina voltará ao status "No escritório".')) return
+                  setLoading(true)
+                  try {
+                    const { error } = await supabase
+                      .from('machines')
+                      .update({ returned_to_network: false, returned_at: null })
+                      .eq('id', machine.id)
+                    if (error) throw error
+                    toast.success('Devolução revertida! Máquina de volta ao escritório.')
+                    router.refresh()
+                    onOpenChange(false)
+                  } catch (err: unknown) {
+                    toast.error((err as Error).message ?? 'Erro ao reverter')
+                  } finally {
+                    setLoading(false)
+                  }
+                }}
+              >
+                Reverter devolução
+              </Button>
+            </div>
+          )}
+
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
               Cancelar
