@@ -283,7 +283,7 @@ export default function ProducersClient({ producers, entries, events, paidOrders
       </div>
 
       {periodActive ? (
-        // ───── Lista filtrada por período (com seleção para o lote) ─────
+        // ───── Tabela por período (com seleção para o lote) ─────
         filteredPeriod.length === 0 ? (
           <div className="text-center py-16 space-y-2">
             <CalendarClock className="h-12 w-12 mx-auto text-gray-300" />
@@ -291,44 +291,72 @@ export default function ProducersClient({ producers, entries, events, paidOrders
             <p className="text-sm text-gray-400">Ajuste o período ou limpe o filtro para ver todos</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filteredPeriod.map(({ producer, eventIds, payable }) => {
-              const checked = !excluded.has(producer.id)
-              return (
-                <Card key={producer.id} className={`h-full transition-shadow ${checked ? 'border-green-200' : 'opacity-60'}`}>
-                  <CardContent className="pt-5">
-                    <div className="flex items-start gap-3">
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={() => toggleExclude(producer.id)}
-                        className="mt-1 h-4 w-4 rounded shrink-0"
-                        aria-label={`Incluir ${producer.full_name} no lote`}
-                      />
-                      <div className="flex-1 min-w-0">
-                        <Link href={`/dashboard/producers/${producer.id}`} className="font-semibold text-gray-900 truncate hover:underline block">
+          <div className="overflow-x-auto rounded-lg border bg-white">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 border-b">
+                <tr>
+                  <th className="px-4 py-3 w-10">
+                    <input
+                      type="checkbox"
+                      className="rounded w-4 h-4 accent-blue-600"
+                      checked={filteredPeriod.every(p => !excluded.has(p.producer.id))}
+                      onChange={() => {
+                        const allChecked = filteredPeriod.every(p => !excluded.has(p.producer.id))
+                        setExcluded(allChecked
+                          ? new Set(filteredPeriod.map(p => p.producer.id))
+                          : new Set()
+                        )
+                      }}
+                    />
+                  </th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-600">Nome</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-600">E-mail</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-600">Telefone</th>
+                  <th className="px-4 py-3 text-center font-medium text-gray-600">Eventos</th>
+                  <th className="px-4 py-3 text-right font-medium text-gray-600">A pagar</th>
+                  <th className="px-4 py-3 w-8" />
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {filteredPeriod.map(({ producer, eventIds, payable }) => {
+                  const checked = !excluded.has(producer.id)
+                  return (
+                    <tr key={producer.id} className={`transition-colors hover:bg-gray-50 ${!checked ? 'opacity-50' : ''}`}>
+                      <td className="px-4 py-3">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => toggleExclude(producer.id)}
+                          className="rounded w-4 h-4 accent-blue-600"
+                        />
+                      </td>
+                      <td className="px-4 py-3 font-medium text-gray-900">
+                        <Link href={`/dashboard/producers/${producer.id}`} className="hover:underline hover:text-blue-700">
                           {producer.full_name}
                         </Link>
-                        {producer.email && (
-                          <p className="text-sm text-gray-500 truncate mt-0.5">{producer.email}</p>
-                        )}
-                        <p className="text-xs text-gray-400 mt-0.5">
-                          {eventIds.length} evento{eventIds.length !== 1 ? 's' : ''} pendente{eventIds.length !== 1 ? 's' : ''} no período
-                        </p>
-                      </div>
-                    </div>
-                    <div className="mt-4 pt-4 border-t flex items-center justify-between">
-                      <span className="text-xs text-gray-400">A pagar no período</span>
-                      <span className="text-sm font-bold text-green-600">{formatCurrency(payable)}</span>
-                    </div>
-                  </CardContent>
-                </Card>
-              )
-            })}
+                      </td>
+                      <td className="px-4 py-3 text-gray-500">{producer.email ?? '—'}</td>
+                      <td className="px-4 py-3 text-gray-500">{producer.phone ?? '—'}</td>
+                      <td className="px-4 py-3 text-center text-gray-500">
+                        {eventIds.length}
+                      </td>
+                      <td className="px-4 py-3 text-right font-bold text-green-700">
+                        {formatCurrency(payable)}
+                      </td>
+                      <td className="px-4 py-3">
+                        <Link href={`/dashboard/producers/${producer.id}`}>
+                          <ChevronRight className="h-4 w-4 text-gray-400" />
+                        </Link>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
           </div>
         )
       ) : (
-        // ───── Lista acumulada (original, inalterada) ─────
+        // ───── Tabela acumulada ─────
         filteredBalance.length === 0 ? (
           <div className="text-center py-16">
             {producers.length === 0 ? (
@@ -342,37 +370,49 @@ export default function ProducersClient({ producers, entries, events, paidOrders
             )}
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filteredBalance.map(({ producer, balance }) => (
-              <Link key={producer.id} href={`/dashboard/producers/${producer.id}`}>
-                <Card className="hover:shadow-md transition-shadow cursor-pointer h-full">
-                  <CardContent className="pt-5">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex-1 min-w-0">
-                        <p className="font-semibold text-gray-900 truncate">{producer.full_name}</p>
-                        {producer.email && (
-                          <p className="text-sm text-gray-500 truncate mt-0.5">{producer.email}</p>
-                        )}
-                        {producer.phone && (
-                          <p className="text-sm text-gray-500">{producer.phone}</p>
-                        )}
-                      </div>
-                      <ChevronRight className="h-4 w-4 text-gray-400 shrink-0 mt-0.5" />
-                    </div>
-                    <div className="mt-4 pt-4 border-t flex items-center justify-between">
+          <div className="overflow-x-auto rounded-lg border bg-white">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 border-b">
+                <tr>
+                  <th className="px-4 py-3 text-left font-medium text-gray-600">Nome</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-600">E-mail</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-600">Telefone</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-600">PIX</th>
+                  <th className="px-4 py-3 text-center font-medium text-gray-600">Status</th>
+                  <th className="px-4 py-3 text-right font-medium text-gray-600">Saldo</th>
+                  <th className="px-4 py-3 w-8" />
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {filteredBalance.map(({ producer, balance }) => (
+                  <tr key={producer.id} className="hover:bg-gray-50 transition-colors cursor-pointer">
+                    <td className="px-4 py-3 font-medium text-gray-900">
+                      <Link href={`/dashboard/producers/${producer.id}`} className="hover:underline hover:text-blue-700 block">
+                        {producer.full_name}
+                      </Link>
+                    </td>
+                    <td className="px-4 py-3 text-gray-500">{producer.email ?? '—'}</td>
+                    <td className="px-4 py-3 text-gray-500">{producer.phone ?? '—'}</td>
+                    <td className="px-4 py-3 text-gray-500 font-mono text-xs">{producer.pix_key ?? '—'}</td>
+                    <td className="px-4 py-3 text-center">
                       <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
                         balance >= 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
                       }`}>
                         {balance >= 0 ? 'A pagar' : 'Devendo'}
                       </span>
-                      <span className={`text-sm font-bold ${balance >= 0 ? 'text-green-700' : 'text-red-600'}`}>
-                        {formatCurrency(Math.abs(balance))}
-                      </span>
-                    </div>
-                  </CardContent>
-                </Card>
-              </Link>
-            ))}
+                    </td>
+                    <td className={`px-4 py-3 text-right font-bold ${balance >= 0 ? 'text-green-700' : 'text-red-600'}`}>
+                      {formatCurrency(Math.abs(balance))}
+                    </td>
+                    <td className="px-4 py-3">
+                      <Link href={`/dashboard/producers/${producer.id}`}>
+                        <ChevronRight className="h-4 w-4 text-gray-400" />
+                      </Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )
       )}
