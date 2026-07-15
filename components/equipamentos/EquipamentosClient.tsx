@@ -1,11 +1,12 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   Plus, Search, Pencil, Trash2, CheckCircle, XCircle, Zap, Gift, MapPin,
-  RotateCcw, ChevronUp, ChevronDown, ChevronsUpDown, Cpu, Building2,
+  RotateCcw, ChevronUp, ChevronDown, ChevronsUpDown, Cpu, Building2, Upload,
 } from 'lucide-react'
+import * as XLSX from 'xlsx'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -114,6 +115,8 @@ export default function EquipamentosClient({ rentals: initialRentals, producers,
   const [editingMachine, setEditingMachine] = useState<Machine | null>(null)
   const [selectedMachineIds, setSelectedMachineIds] = useState<Set<string>>(new Set())
   const [devolvendoMachines, setDevolvendoMachines] = useState(false)
+  const [importingMachines, setImportingMachines] = useState(false)
+  const importFileRef = useRef<HTMLInputElement>(null)
 
   function toggleEquipSort(col: EquipSortCol) {
     setEquipSort(prev => prev.col === col ? { col, dir: prev.dir === 'asc' ? 'desc' : 'asc' } : { col, dir: 'asc' })
@@ -437,6 +440,78 @@ export default function EquipamentosClient({ rentals: initialRentals, producers,
     }
   }
 
+  async function handleImportMachinesFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!importFileRef.current) return
+    importFileRef.current.value = ''
+    if (!file) return
+
+    setImportingMachines(true)
+    try {
+      const buffer = await file.arrayBuffer()
+      const wb = XLSX.read(buffer, { type: 'array', cellDates: true })
+      const ws = wb.Sheets[wb.SheetNames[0]]
+      const rows = XLSX.utils.sheet_to_json<{ modelo?: string; instalação?: unknown }>(ws, { defval: null })
+
+      const parsed: { serial_number: string; received_at: string | null }[] = []
+      for (const row of rows) {
+        const serial = String(row.modelo ?? '').trim()
+        if (!serial) continue
+        let received_at: string | null = null
+        const raw = row['instalação']
+        if (raw instanceof Date && !isNaN(raw.getTime())) {
+          received_at = raw.toISOString().split('T')[0]
+        } else if (typeof raw === 'string' && raw.trim()) {
+          const d = new Date(raw.trim())
+          if (!isNaN(d.getTime())) received_at = d.toISOString().split('T')[0]
+        }
+        parsed.push({ serial_number: serial, received_at })
+      }
+
+      if (parsed.length === 0) {
+        toast.error('Nenhuma máquina encontrada no arquivo. Verifique as colunas "modelo" e "instalação".')
+        return
+      }
+
+      // Busca seriais já cadastrados para evitar duplicatas
+      const { data: existing } = await supabase
+        .from('machines')
+        .select('serial_number')
+        .in('serial_number', parsed.map(p => p.serial_number))
+      const existingSet = new Set((existing ?? []).map(e => e.serial_number))
+
+      const toInsert = parsed.filter(p => !existingSet.has(p.serial_number))
+      const skipped = parsed.length - toInsert.length
+
+      if (toInsert.length === 0) {
+        toast.info(`Todas as ${parsed.length} máquinas já estão cadastradas.`)
+        return
+      }
+
+      const msg = skipped > 0
+        ? `Importar ${toInsert.length} máquina(s) nova(s)? (${skipped} já cadastrada(s) serão ignoradas)`
+        : `Importar ${toInsert.length} máquina(s)?`
+      if (!confirm(msg)) return
+
+      const inserts = toInsert.map(p => ({
+        serial_number: p.serial_number,
+        model: p.serial_number,
+        operator: 'Rede',
+        received_at: p.received_at,
+      }))
+
+      const { error } = await supabase.from('machines').insert(inserts)
+      if (error) throw error
+
+      toast.success(`${toInsert.length} máquina(s) importada(s)!${skipped > 0 ? ` (${skipped} ignorada(s))` : ''}`)
+      router.refresh()
+    } catch (err: unknown) {
+      toast.error((err as Error).message ?? 'Erro ao importar Excel')
+    } finally {
+      setImportingMachines(false)
+    }
+  }
+
   async function handleDeleteMachine(m: Machine) {
     if (!confirm(`Excluir máquina "${m.serial_number}" (${m.model})?`)) return
     const { error } = await supabase.from('machines').delete().eq('id', m.id)
@@ -708,6 +783,22 @@ export default function EquipamentosClient({ rentals: initialRentals, producers,
                 {devolvendoMachines ? 'Devolvendo...' : `Devolver Selecionadas (${selectedMachineIds.size})`}
               </Button>
             )}
+            <input
+              ref={importFileRef}
+              type="file"
+              accept=".xlsx,.xls"
+              className="hidden"
+              onChange={handleImportMachinesFile}
+            />
+            <Button
+              variant="outline"
+              onClick={() => importFileRef.current?.click()}
+              disabled={importingMachines}
+              className="gap-2"
+            >
+              <Upload className="h-4 w-4" />
+              {importingMachines ? 'Importando...' : 'Importar Excel'}
+            </Button>
             <Button onClick={() => { setEditingMachine(null); setMachineDialogOpen(true) }} className="gap-2">
               <Plus className="h-4 w-4" />
               Nova Máquina
