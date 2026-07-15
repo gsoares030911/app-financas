@@ -25,6 +25,13 @@ export default function OrdemPagamento({ order, producer, events, entries }: Pro
   const totalDebits  = entries.filter(e => e.entry_type === 'debito').reduce((s, e) => s + Number(e.amount), 0)
   const totalAPagar  = Number(order.amount)
 
+  const debitsByEvent = entries.reduce<Record<string, number>>((acc, e) => {
+    if (e.entry_type === 'debito' && e.event_id) {
+      acc[e.event_id] = (acc[e.event_id] ?? 0) + Number(e.amount)
+    }
+    return acc
+  }, {})
+
   const emittedAt = fmtDate(order.created_at.split('T')[0])
   const paidAt    = order.paid_at ? fmtDate(order.paid_at.split('T')[0]) : null
 
@@ -146,7 +153,7 @@ export default function OrdemPagamento({ order, producer, events, entries }: Pro
                     <th className="px-4 py-2.5 text-left font-semibold text-gray-600">Evento</th>
                     <th className="px-4 py-2.5 text-center font-semibold text-gray-600">Data</th>
                     <th className="px-4 py-2.5 text-right font-semibold text-gray-600">Bruto</th>
-                    <th className="px-4 py-2.5 text-right font-semibold text-gray-600">Taxa</th>
+                    <th className="px-4 py-2.5 text-right font-semibold text-gray-600">Despesas</th>
                     <th className="px-4 py-2.5 text-right font-semibold text-gray-600">Líquido</th>
                     <th className="px-4 py-2.5 text-center font-semibold text-gray-600">Status</th>
                   </tr>
@@ -157,7 +164,7 @@ export default function OrdemPagamento({ order, producer, events, entries }: Pro
                       <td className="px-4 py-2.5 font-medium text-gray-800">{ev.name}</td>
                       <td className="px-4 py-2.5 text-center text-gray-500 whitespace-nowrap">{fmtDate(ev.event_date)}</td>
                       <td className="px-4 py-2.5 text-right text-gray-700">{formatCurrency(ev.gross_revenue)}</td>
-                      <td className="px-4 py-2.5 text-right text-red-600">−{formatCurrency(ev.platform_fee)}</td>
+                      <td className="px-4 py-2.5 text-right text-red-600">−{formatCurrency(debitsByEvent[ev.id] ?? 0)}</td>
                       <td className="px-4 py-2.5 text-right font-semibold text-green-700">{formatCurrency(ev.net_amount)}</td>
                       <td className="px-4 py-2.5 text-center">
                         <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
