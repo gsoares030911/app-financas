@@ -149,15 +149,42 @@ export default function ProducersClient({ producers, entries, events, paidOrders
       const buffer = await file.arrayBuffer()
       const wb = XLSX.read(buffer, { type: 'array' })
       const ws = wb.Sheets[wb.SheetNames[0]]
-      type Row = { nome?: string; email?: string; telefone?: string; pix?: string; banco?: string; agencia?: string; conta?: string; observacoes?: string }
-      const rows = XLSX.utils.sheet_to_json<Row>(ws, { defval: null })
+
+      // Lê como array de arrays e normaliza os headers:
+      // remove acentos, hífens, espaços e coloca em minúsculas
+      // ex: "E-mail" → "email", "Nome da Empresa" → "nomedaempresa"
+      function normKey(s: string) {
+        return String(s ?? '').trim().toLowerCase()
+          .normalize('NFD').replace(/[̀-ͯ]/g, '')
+          .replace(/[-\s]+/g, '')
+      }
+      const raw = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, defval: '' }) as unknown[][]
+      if (raw.length < 2) { toast.error('Planilha vazia.'); return }
+      const headers = (raw[0] as string[]).map(normKey)
+      const rows = raw.slice(1).map(row =>
+        Object.fromEntries(headers.map((h, i) => [h, String((row as string[])[i] ?? '').trim()]))
+      )
 
       const parsed = rows
-        .map(r => ({ name: String(r.nome ?? '').trim(), email: String(r.email ?? '').trim() || null, phone: String(r.telefone ?? '').trim() || null, pix_key: String(r.pix ?? '').trim() || null, bank_name: String(r.banco ?? '').trim() || null, bank_agency: String(r.agencia ?? '').trim() || null, bank_account: String(r.conta ?? '').trim() || null, notes: String(r.observacoes ?? '').trim() || null }))
+        .map(r => {
+          const empresa = r['nomedaempresa'] || ''
+          const obs     = r['observacoes'] || ''
+          const notes   = [empresa && `Empresa: ${empresa}`, obs].filter(Boolean).join(' | ') || null
+          return {
+            name:         r['nome'] || '',
+            email:        r['email'] || null,
+            phone:        r['telefone'] || null,
+            pix_key:      r['pix'] || null,
+            bank_name:    r['banco'] || null,
+            bank_agency:  r['agencia'] || null,
+            bank_account: r['conta'] || null,
+            notes,
+          }
+        })
         .filter(r => r.name)
 
       if (parsed.length === 0) {
-        toast.error('Nenhum produtor encontrado. Verifique se a coluna "nome" existe.')
+        toast.error('Nenhum produtor encontrado. Verifique se a coluna "Nome" existe.')
         return
       }
 
