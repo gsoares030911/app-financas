@@ -603,9 +603,8 @@ export default function EquipamentosClient({ rentals: initialRentals, producers,
             {(
               [
                 { key: 'todos',    label: `Todos (${equipCounts.total})` },
-                { key: 'ativo',    label: `Ativos (${equipCounts.ativos})`,               activeClass: 'bg-green-600 text-white border-green-600',   inactiveClass: 'text-green-700 border-green-300 hover:bg-green-50' },
-                { key: 'inativo',  label: `Inativos (${equipCounts.inativos})`,           activeClass: 'bg-gray-500 text-white border-gray-500',     inactiveClass: 'text-gray-600 border-gray-300 hover:bg-gray-50' },
-                { key: 'devolvido',label: `Dev. à Operadora (${equipCounts.devolvidos})`, activeClass: 'bg-red-600 text-white border-red-600',       inactiveClass: 'text-red-700 border-red-300 hover:bg-red-50' },
+                { key: 'ativo',    label: `Ativos (${equipCounts.ativos})`,     activeClass: 'bg-green-600 text-white border-green-600', inactiveClass: 'text-green-700 border-green-300 hover:bg-green-50' },
+                { key: 'inativo',  label: `Inativos (${equipCounts.inativos})`, activeClass: 'bg-gray-500 text-white border-gray-500',   inactiveClass: 'text-gray-600 border-gray-300 hover:bg-gray-50' },
               ] as { key: EquipFilter; label: string; activeClass?: string; inactiveClass?: string }[]
             ).map(chip => {
               const isActive = equipFilter === chip.key
@@ -693,10 +692,9 @@ export default function EquipamentosClient({ rentals: initialRentals, producers,
             {(
               [
                 { key: 'todos',     label: `Todos (${pdvCounts.total})` },
-                { key: 'ativo',     label: `Ativos (${pdvCounts.ativos})`,                 activeClass: 'bg-green-600 text-white border-green-600',   inactiveClass: 'text-green-700 border-green-300 hover:bg-green-50' },
-                { key: 'inativo',   label: `Inativos (${pdvCounts.inativos})`,             activeClass: 'bg-gray-500 text-white border-gray-500',     inactiveClass: 'text-gray-600 border-gray-300 hover:bg-gray-50' },
-                { key: 'bonificada',label: `Bonificadas (${pdvCounts.bonificadas})`,       activeClass: 'bg-blue-600 text-white border-blue-600',     inactiveClass: 'text-blue-700 border-blue-300 hover:bg-blue-50' },
-                { key: 'devolvido', label: `Dev. à Operadora (${pdvCounts.devolvidos})`,   activeClass: 'bg-red-600 text-white border-red-600',       inactiveClass: 'text-red-700 border-red-300 hover:bg-red-50' },
+                { key: 'ativo',     label: `Ativos (${pdvCounts.ativos})`,           activeClass: 'bg-green-600 text-white border-green-600', inactiveClass: 'text-green-700 border-green-300 hover:bg-green-50' },
+                { key: 'inativo',   label: `Inativos (${pdvCounts.inativos})`,       activeClass: 'bg-gray-500 text-white border-gray-500',   inactiveClass: 'text-gray-600 border-gray-300 hover:bg-gray-50' },
+                { key: 'bonificada',label: `Bonificadas (${pdvCounts.bonificadas})`, activeClass: 'bg-blue-600 text-white border-blue-600',   inactiveClass: 'text-blue-700 border-blue-300 hover:bg-blue-50' },
               ] as { key: PdvFilter; label: string; activeClass?: string; inactiveClass?: string }[]
             ).map(chip => {
               const isActive = pdvFilter === chip.key
