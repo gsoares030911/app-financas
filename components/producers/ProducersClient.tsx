@@ -1,9 +1,9 @@
 'use client'
 
-import { useState, useMemo, useRef } from 'react'
+import { useState, useMemo, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Plus, Search, Users, TrendingUp, TrendingDown, ChevronRight, FileText, Loader2, CalendarClock, Upload } from 'lucide-react'
+import { Plus, Search, Users, TrendingUp, TrendingDown, ChevronRight, FileText, Loader2, CalendarClock, Upload, ChevronLeft } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent } from '@/components/ui/card'
@@ -30,18 +30,28 @@ interface PeriodPayable {
 interface Props {
   producers: Producer[]
   entries: Pick<AccountEntry, 'producer_id' | 'event_id' | 'entry_type' | 'amount'>[]
-  events: { id: string; producer_id: string; event_date: string; billing_from: string | null; status: string }[]
   paidOrders: { producer_id: string; amount: number }[]
   emittedEventIds: string[]
   userId: string
+  page: number
+  totalPages: number
+  totalCount: number
+  searchQuery: string
 }
 
 type BalanceFilter = 'todos' | 'a_pagar' | 'devendo' | 'zerado'
 
-export default function ProducersClient({ producers, entries, events, paidOrders, emittedEventIds, userId }: Props) {
+type PeriodEvent = { id: string; producer_id: string; event_date: string; billing_from: string | null; status: string }
+type PeriodEntry = Pick<AccountEntry, 'producer_id' | 'event_id' | 'entry_type' | 'amount'>
+
+export default function ProducersClient({
+  producers, entries, paidOrders, emittedEventIds, userId,
+  page, totalPages, totalCount, searchQuery,
+}: Props) {
   const router = useRouter()
   const supabase = createClient()
-  const [search, setSearch] = useState('')
+
+  const [search, setSearch] = useState(searchQuery)
   const [balanceFilter, setBalanceFilter] = useState<BalanceFilter>('todos')
   const [formOpen, setFormOpen] = useState(false)
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined)
@@ -50,17 +60,38 @@ export default function ProducersClient({ producers, entries, events, paidOrders
   const [importingProducers, setImportingProducers] = useState(false)
   const importProducerRef = useRef<HTMLInputElement>(null)
 
+  // Period data — fetched client-side when a date range is selected
+  const [periodLoading, setPeriodLoading] = useState(false)
+  const [periodProducers, setPeriodProducers] = useState<Producer[]>([])
+  const [periodEvents, setPeriodEvents] = useState<PeriodEvent[]>([])
+  const [periodEntries, setPeriodEntries] = useState<PeriodEntry[]>([])
+  const [periodEmittedIds, setPeriodEmittedIds] = useState<string[]>([])
+
   const periodActive = !!dateRange?.from
-  // Eventos já cobertos por alguma OP existente — não entram no lote
   const emittedSet = useMemo(() => new Set(emittedEventIds), [emittedEventIds])
 
-  // ───── Visão acumulada (comportamento original, inalterado) ─────
+  // Debounce search → URL (skip initial mount)
+  const searchInitialized = useRef(false)
+  useEffect(() => {
+    if (!searchInitialized.current) { searchInitialized.current = true; return }
+    if (periodActive) return
+    const t = setTimeout(() => {
+      const p = new URLSearchParams()
+      if (search) p.set('q', search)
+      p.set('page', '1')
+      router.push(`/dashboard/producers?${p.toString()}`)
+    }, 400)
+    return () => clearTimeout(t)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search])
+
+  // ───── Visão acumulada ─────
   const producersWithBalance = useMemo((): ProducerWithBalance[] => {
     return producers.map(producer => {
       const pe = entries.filter(e => e.producer_id === producer.id)
       const credits = pe.filter(e => e.entry_type === 'credito').reduce((s, e) => s + e.amount, 0)
-      const debits = pe.filter(e => e.entry_type === 'debito').reduce((s, e) => s + e.amount, 0)
-      const paid = paidOrders.filter(o => o.producer_id === producer.id).reduce((s, o) => s + o.amount, 0)
+      const debits  = pe.filter(e => e.entry_type === 'debito').reduce((s, e) => s + e.amount, 0)
+      const paid    = paidOrders.filter(o => o.producer_id === producer.id).reduce((s, o) => s + o.amount, 0)
       return { producer, balance: credits - debits - paid }
     })
   }, [producers, entries, paidOrders])
@@ -81,38 +112,99 @@ export default function ProducersClient({ producers, entries, events, paidOrders
   }, [producersWithBalance, search, balanceFilter])
 
   const totalToReceive = producersWithBalance.filter(p => p.balance > 0).reduce((s, p) => s + p.balance, 0)
-  const totalOwed = producersWithBalance.filter(p => p.balance < 0).reduce((s, p) => s + Math.abs(p.balance), 0)
+  const totalOwed      = producersWithBalance.filter(p => p.balance < 0).reduce((s, p) => s + Math.abs(p.balance), 0)
 
   function ymd(d: Date): string {
     return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
   }
 
-  // ───── Visão por período (emissão de OP em lote) ─────
-  // Só eventos PENDENTES com data no período, somando saldo (créditos − débitos) dos
-  // lançamentos vinculados — mesma regra do botão "Emitir OP" da tela do produtor.
+  // ───── Buscar dados do período no Supabase (client-side) ─────
+  async function fetchPeriodData(fromStr: string, toStr: string) {
+    setPeriodLoading(true)
+    try {
+      // Duas queries separadas para cobrir billing_from E event_date
+      const [q1, q2] = await Promise.all([
+        supabase.from('events')
+          .select('id, producer_id, event_date, billing_from, status')
+          .eq('status', 'pending')
+          .gte('billing_from', fromStr)
+          .lte('billing_from', toStr),
+        supabase.from('events')
+          .select('id, producer_id, event_date, billing_from, status')
+          .eq('status', 'pending')
+          .is('billing_from', null)
+          .gte('event_date', fromStr)
+          .lte('event_date', toStr),
+      ])
+
+      const seen = new Set<string>()
+      const evs: PeriodEvent[] = [...(q1.data ?? []), ...(q2.data ?? [])].filter(e => {
+        if (seen.has(e.id)) return false
+        seen.add(e.id)
+        return true
+      })
+
+      const producerIdArr = [...new Set(evs.map(e => e.producer_id))]
+
+      if (producerIdArr.length === 0) {
+        setPeriodProducers([])
+        setPeriodEvents([])
+        setPeriodEntries([])
+        setPeriodEmittedIds([])
+        return
+      }
+
+      const eventIds = evs.map(e => e.id)
+
+      const [prodsRes, entriesRes, ordersRes] = await Promise.all([
+        supabase.from('producers').select('*').in('id', producerIdArr),
+        supabase.from('account_entries')
+          .select('producer_id, event_id, entry_type, amount')
+          .in('event_id', eventIds),
+        supabase.from('payment_orders')
+          .select('event_ids')
+          .in('producer_id', producerIdArr),
+      ])
+
+      const orders = ordersRes.data ?? []
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const allEmitted = [...new Set(orders.flatMap((o: any) => o.event_ids ?? []))] as string[]
+
+      setPeriodProducers((prodsRes.data ?? []) as Producer[])
+      setPeriodEvents(evs)
+      setPeriodEntries((entriesRes.data ?? []) as PeriodEntry[])
+      setPeriodEmittedIds(allEmitted)
+    } finally {
+      setPeriodLoading(false)
+    }
+  }
+
+  // ───── Visão por período ─────
   const periodPayables = useMemo((): PeriodPayable[] => {
-    if (!periodActive) return []
+    if (!periodActive || periodLoading) return []
     const fromStr = ymd(dateRange!.from!)
     const toStr = dateRange!.to ? ymd(dateRange!.to) : fromStr
-    return producers
+    const periodEmittedSet = new Set(periodEmittedIds)
+
+    return periodProducers
       .map(producer => {
-        const eventIds = events
+        const eventIds = periodEvents
           .filter(ev => {
             if (ev.producer_id !== producer.id || ev.status !== 'pending') return false
-            if (emittedSet.has(ev.id)) return false // já está em uma OP existente
+            if (periodEmittedSet.has(ev.id)) return false
             const dateKey = ev.billing_from ?? ev.event_date
             return dateKey >= fromStr && dateKey <= toStr
           })
           .map(ev => ev.id)
         if (eventIds.length === 0) return { producer, eventIds, payable: 0 }
         const ids = new Set(eventIds)
-        const rel = entries.filter(e => e.event_id && ids.has(e.event_id))
+        const rel = periodEntries.filter(e => e.event_id && ids.has(e.event_id))
         const credits = rel.filter(e => e.entry_type === 'credito').reduce((s, e) => s + e.amount, 0)
-        const debits = rel.filter(e => e.entry_type === 'debito').reduce((s, e) => s + e.amount, 0)
+        const debits  = rel.filter(e => e.entry_type === 'debito').reduce((s, e) => s + e.amount, 0)
         return { producer, eventIds, payable: Math.max(credits - debits, 0) }
       })
       .filter(p => p.payable > 0)
-  }, [periodActive, dateRange, producers, events, entries, emittedSet])
+  }, [periodActive, periodLoading, dateRange, periodProducers, periodEvents, periodEntries, periodEmittedIds])
 
   const filteredPeriod = useMemo(() => {
     if (!search.trim()) return periodPayables
@@ -127,8 +219,7 @@ export default function ProducersClient({ producers, entries, events, paidOrders
   const toEmit = filteredPeriod.filter(p => !excluded.has(p.producer.id))
   const totalToEmit = toEmit.reduce((s, p) => s + p.payable, 0)
 
-  // Resumo do período (independente da busca) para os cards do topo
-  const periodTotal = periodPayables.reduce((s, p) => s + p.payable, 0)
+  const periodTotal      = periodPayables.reduce((s, p) => s + p.payable, 0)
   const periodEventCount = periodPayables.reduce((s, p) => s + p.eventIds.length, 0)
 
   function toggleExclude(id: string) {
@@ -150,9 +241,6 @@ export default function ProducersClient({ producers, entries, events, paidOrders
       const wb = XLSX.read(buffer, { type: 'array' })
       const ws = wb.Sheets[wb.SheetNames[0]]
 
-      // Lê como array de arrays e normaliza os headers:
-      // remove acentos, hífens, espaços e coloca em minúsculas
-      // ex: "E-mail" → "email", "Nome da Empresa" → "nomedaempresa"
       function normKey(s: string) {
         return String(s ?? '').trim().toLowerCase()
           .normalize('NFD').replace(/[̀-ͯ]/g, '')
@@ -195,7 +283,7 @@ export default function ProducersClient({ producers, entries, events, paidOrders
       const existingSet = new Set((existing ?? []).map(e => e.full_name.toLowerCase()))
 
       const toInsert = parsed.filter(p => !existingSet.has(p.name.toLowerCase()))
-      const skipped = parsed.length - toInsert.length
+      const skipped  = parsed.length - toInsert.length
 
       if (toInsert.length === 0) {
         toast.info(`Todos os ${parsed.length} produtores já estão cadastrados.`)
@@ -246,19 +334,19 @@ export default function ProducersClient({ producers, entries, events, paidOrders
 
       let n = count ?? 0
       const from = dateRange!.from!.toISOString().split('T')[0]
-      const to = (dateRange!.to ?? dateRange!.from!).toISOString().split('T')[0]
+      const to   = (dateRange!.to ?? dateRange!.from!).toISOString().split('T')[0]
 
       const rows = toEmit.map(p => {
         n += 1
         return {
-          user_id: userId,
-          producer_id: p.producer.id,
+          user_id:      userId,
+          producer_id:  p.producer.id,
           order_number: `OP-${year}-${String(n).padStart(3, '0')}`,
-          amount: p.payable,
-          status: 'pending' as const,
-          event_ids: p.eventIds,
-          period_from: from,
-          period_to: to,
+          amount:       p.payable,
+          status:       'pending' as const,
+          event_ids:    p.eventIds,
+          period_from:  from,
+          period_to:    to,
         }
       })
 
@@ -272,13 +360,20 @@ export default function ProducersClient({ producers, entries, events, paidOrders
     }
   }
 
+  function goPage(p: number) {
+    const params = new URLSearchParams()
+    if (search) params.set('q', search)
+    params.set('page', String(p))
+    router.push(`/dashboard/producers?${params.toString()}`)
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Produtores Culturais</h1>
           <p className="text-gray-500 text-sm mt-1">
-            {producers.length} produtor{producers.length !== 1 ? 'es' : ''} cadastrado{producers.length !== 1 ? 's' : ''}
+            {totalCount} produtor{totalCount !== 1 ? 'es' : ''} cadastrado{totalCount !== 1 ? 's' : ''}
           </p>
         </div>
         <div className="flex gap-2">
@@ -306,7 +401,9 @@ export default function ProducersClient({ producers, entries, events, paidOrders
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-500">{periodActive ? 'Produtores a pagar' : 'Produtores'}</p>
-                <p className="text-2xl font-bold text-gray-900">{periodActive ? periodPayables.length : producers.length}</p>
+                <p className="text-2xl font-bold text-gray-900">
+                  {periodActive ? (periodLoading ? '…' : periodPayables.length) : totalCount}
+                </p>
               </div>
               <div className="p-3 bg-blue-50 rounded-full">
                 <Users className="h-5 w-5 text-blue-600" />
@@ -319,7 +416,11 @@ export default function ProducersClient({ producers, entries, events, paidOrders
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-500">{periodActive ? 'A Pagar no período' : 'A Pagar'}</p>
-                <p className="text-2xl font-bold text-green-600">{formatCurrency(periodActive ? periodTotal : totalToReceive)}</p>
+                <p className="text-2xl font-bold text-green-600">
+                  {periodActive
+                    ? (periodLoading ? '…' : formatCurrency(periodTotal))
+                    : formatCurrency(totalToReceive)}
+                </p>
               </div>
               <div className="p-3 bg-green-50 rounded-full">
                 <TrendingUp className="h-5 w-5 text-green-600" />
@@ -334,7 +435,7 @@ export default function ProducersClient({ producers, entries, events, paidOrders
                 <>
                   <div>
                     <p className="text-sm text-gray-500">Eventos pendentes</p>
-                    <p className="text-2xl font-bold text-blue-600">{periodEventCount}</p>
+                    <p className="text-2xl font-bold text-blue-600">{periodLoading ? '…' : periodEventCount}</p>
                   </div>
                   <div className="p-3 bg-blue-50 rounded-full">
                     <CalendarClock className="h-5 w-5 text-blue-600" />
@@ -364,17 +465,36 @@ export default function ProducersClient({ producers, entries, events, paidOrders
               <CalendarClock className="h-4 w-4 text-blue-600" />
               <span className="font-medium">Emitir OP em lote</span>
             </div>
-            <DateRangePicker value={dateRange} onChange={r => { setDateRange(r); setExcluded(new Set()) }} />
+            <DateRangePicker
+              value={dateRange}
+              onChange={r => {
+                setDateRange(r)
+                setExcluded(new Set())
+                if (r?.from && r?.to) {
+                  fetchPeriodData(ymd(r.from), ymd(r.to))
+                } else if (r?.from && !r?.to) {
+                  fetchPeriodData(ymd(r.from), ymd(r.from))
+                } else {
+                  setPeriodProducers([]); setPeriodEvents([]); setPeriodEntries([]); setPeriodEmittedIds([])
+                }
+              }}
+            />
             {periodActive && (
               <>
-                <span className="text-sm text-gray-500">
-                  {filteredPeriod.length === 0
-                    ? 'Nenhum produtor com saldo a pagar no período'
-                    : <>{toEmit.length} de {filteredPeriod.length} produtor{filteredPeriod.length !== 1 ? 'es' : ''} · <strong className="text-green-700">{formatCurrency(totalToEmit)}</strong></>}
-                </span>
+                {periodLoading ? (
+                  <span className="flex items-center gap-1 text-sm text-gray-400">
+                    <Loader2 className="h-3 w-3 animate-spin" /> Carregando período…
+                  </span>
+                ) : (
+                  <span className="text-sm text-gray-500">
+                    {filteredPeriod.length === 0
+                      ? 'Nenhum produtor com saldo a pagar no período'
+                      : <>{toEmit.length} de {filteredPeriod.length} produtor{filteredPeriod.length !== 1 ? 'es' : ''} · <strong className="text-green-700">{formatCurrency(totalToEmit)}</strong></>}
+                  </span>
+                )}
                 <Button
                   onClick={emitirLote}
-                  disabled={emitting || toEmit.length === 0}
+                  disabled={emitting || toEmit.length === 0 || periodLoading}
                   className="lg:ml-auto bg-green-600 hover:bg-green-700"
                   size="sm"
                 >
@@ -422,7 +542,12 @@ export default function ProducersClient({ producers, entries, events, paidOrders
 
       {periodActive ? (
         // ───── Tabela por período (com seleção para o lote) ─────
-        filteredPeriod.length === 0 ? (
+        periodLoading ? (
+          <div className="flex items-center justify-center py-16 gap-2 text-gray-400">
+            <Loader2 className="h-6 w-6 animate-spin" />
+            <span>Buscando produtores do período…</span>
+          </div>
+        ) : filteredPeriod.length === 0 ? (
           <div className="text-center py-16 space-y-2">
             <CalendarClock className="h-12 w-12 mx-auto text-gray-300" />
             <p className="text-gray-500 font-medium">Nenhum produtor com evento a pagar neste período</p>
@@ -475,12 +600,8 @@ export default function ProducersClient({ producers, entries, events, paidOrders
                       </td>
                       <td className="px-4 py-3 text-gray-500">{producer.email ?? '—'}</td>
                       <td className="px-4 py-3 text-gray-500">{producer.phone ?? '—'}</td>
-                      <td className="px-4 py-3 text-center text-gray-500">
-                        {eventIds.length}
-                      </td>
-                      <td className="px-4 py-3 text-right font-bold text-green-700">
-                        {formatCurrency(payable)}
-                      </td>
+                      <td className="px-4 py-3 text-center text-gray-500">{eventIds.length}</td>
+                      <td className="px-4 py-3 text-right font-bold text-green-700">{formatCurrency(payable)}</td>
                       <td className="px-4 py-3">
                         <Link href={`/dashboard/producers/${producer.id}`}>
                           <ChevronRight className="h-4 w-4 text-gray-400" />
@@ -497,61 +618,89 @@ export default function ProducersClient({ producers, entries, events, paidOrders
         // ───── Tabela acumulada ─────
         filteredBalance.length === 0 ? (
           <div className="text-center py-16">
-            {producers.length === 0 ? (
+            {totalCount === 0 ? (
               <div className="space-y-2">
                 <Users className="h-12 w-12 mx-auto text-gray-300" />
                 <p className="text-gray-500 font-medium">Nenhum produtor cadastrado</p>
                 <p className="text-sm text-gray-400">Clique em "Novo Produtor" para começar</p>
               </div>
             ) : (
-              <p className="text-gray-400">Nenhum resultado para "{search}"</p>
+              <p className="text-gray-400">Nenhum resultado para &quot;{search}&quot;</p>
             )}
           </div>
         ) : (
-          <div className="overflow-x-auto rounded-lg border bg-white">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50 border-b">
-                <tr>
-                  <th className="px-4 py-3 text-left font-medium text-gray-600">Nome</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-600">E-mail</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-600">Telefone</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-600">PIX</th>
-                  <th className="px-4 py-3 text-center font-medium text-gray-600">Status</th>
-                  <th className="px-4 py-3 text-right font-medium text-gray-600">Saldo</th>
-                  <th className="px-4 py-3 w-8" />
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {filteredBalance.map(({ producer, balance }) => (
-                  <tr key={producer.id} className="hover:bg-gray-50 transition-colors cursor-pointer">
-                    <td className="px-4 py-3 font-medium text-gray-900">
-                      <Link href={`/dashboard/producers/${producer.id}`} className="hover:underline hover:text-blue-700 block">
-                        {producer.full_name}
-                      </Link>
-                    </td>
-                    <td className="px-4 py-3 text-gray-500">{producer.email ?? '—'}</td>
-                    <td className="px-4 py-3 text-gray-500">{producer.phone ?? '—'}</td>
-                    <td className="px-4 py-3 text-gray-500 font-mono text-xs">{producer.pix_key ?? '—'}</td>
-                    <td className="px-4 py-3 text-center">
-                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-                        balance >= 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-                      }`}>
-                        {balance >= 0 ? 'A pagar' : 'Devendo'}
-                      </span>
-                    </td>
-                    <td className={`px-4 py-3 text-right font-bold ${balance >= 0 ? 'text-green-700' : 'text-red-600'}`}>
-                      {formatCurrency(Math.abs(balance))}
-                    </td>
-                    <td className="px-4 py-3">
-                      <Link href={`/dashboard/producers/${producer.id}`}>
-                        <ChevronRight className="h-4 w-4 text-gray-400" />
-                      </Link>
-                    </td>
+          <>
+            <div className="overflow-x-auto rounded-lg border bg-white">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 border-b">
+                  <tr>
+                    <th className="px-4 py-3 text-left font-medium text-gray-600">Nome</th>
+                    <th className="px-4 py-3 text-left font-medium text-gray-600">E-mail</th>
+                    <th className="px-4 py-3 text-left font-medium text-gray-600">Telefone</th>
+                    <th className="px-4 py-3 text-left font-medium text-gray-600">PIX</th>
+                    <th className="px-4 py-3 text-center font-medium text-gray-600">Status</th>
+                    <th className="px-4 py-3 text-right font-medium text-gray-600">Saldo</th>
+                    <th className="px-4 py-3 w-8" />
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {filteredBalance.map(({ producer, balance }) => (
+                    <tr key={producer.id} className="hover:bg-gray-50 transition-colors cursor-pointer">
+                      <td className="px-4 py-3 font-medium text-gray-900">
+                        <Link href={`/dashboard/producers/${producer.id}`} className="hover:underline hover:text-blue-700 block">
+                          {producer.full_name}
+                        </Link>
+                      </td>
+                      <td className="px-4 py-3 text-gray-500">{producer.email ?? '—'}</td>
+                      <td className="px-4 py-3 text-gray-500">{producer.phone ?? '—'}</td>
+                      <td className="px-4 py-3 text-gray-500 font-mono text-xs">{producer.pix_key ?? '—'}</td>
+                      <td className="px-4 py-3 text-center">
+                        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                          balance >= 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                        }`}>
+                          {balance >= 0 ? 'A pagar' : 'Devendo'}
+                        </span>
+                      </td>
+                      <td className={`px-4 py-3 text-right font-bold ${balance >= 0 ? 'text-green-700' : 'text-red-600'}`}>
+                        {formatCurrency(Math.abs(balance))}
+                      </td>
+                      <td className="px-4 py-3">
+                        <Link href={`/dashboard/producers/${producer.id}`}>
+                          <ChevronRight className="h-4 w-4 text-gray-400" />
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Controles de paginação */}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between px-1">
+                <span className="text-sm text-gray-500">
+                  {totalCount} produtor{totalCount !== 1 ? 'es' : ''} · página {page} de {totalPages}
+                </span>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline" size="sm"
+                    disabled={page <= 1}
+                    onClick={() => goPage(page - 1)}
+                  >
+                    <ChevronLeft className="h-4 w-4 mr-1" /> Anterior
+                  </Button>
+                  <span className="text-sm font-medium text-gray-700 px-1">{page} / {totalPages}</span>
+                  <Button
+                    variant="outline" size="sm"
+                    disabled={page >= totalPages}
+                    onClick={() => goPage(page + 1)}
+                  >
+                    Próxima <ChevronRight className="h-4 w-4 ml-1" />
+                  </Button>
+                </div>
+              </div>
+            )}
+          </>
         )
       )}
 
