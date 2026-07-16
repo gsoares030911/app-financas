@@ -11,6 +11,8 @@ Sistema de gestão financeira da plataforma Bilheteria Express, desenvolvido com
 - Painel de cobranças pendentes de eventos cancelados
 
 ### Produtores Culturais
+- **Paginação server-side**: lista exibe 20 produtores por página; controles Anterior/Próxima ao pé da tabela; busca por nome/email/telefone filtra no servidor (debounce 400 ms) via `?q=...&page=N`
+- **Emissão de OP em lote (visão por período)**: ao selecionar um intervalo de datas, os dados do período são buscados diretamente no Supabase (client-side), sem depender da página atual de produtores — cobre todos os produtores com eventos pendentes no período
 - Cadastro completo com dados bancários (banco, agência, conta, PIX), e-mail e telefone
 - **Taxa de serviço contratual (`service_fee_pct`)**: quando preenchida no cadastro, o import usa `bruto × %` em vez do `feeService` da API (ex: produtor que absorve 7%)
 - Conta corrente por produtor: créditos, débitos, saldo acumulado
