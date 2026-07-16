@@ -54,6 +54,7 @@ Página `/dashboard/equipamentos` com duas abas:
 - Cadastro de PDVs físicos em lojas parceiras (custo pago pela plataforma, não pelo produtor)
 - Campos: nome, loja parceira, endereço, **telefone** (para futuras notificações SMS/WhatsApp), custo mensal, dia de cobrança
 - **Locação bonificada**: checkbox zera o custo e oculta campos de valor — PDV gratuito não gera despesa
+- **Autocomplete de máquina**: campo de texto filtrável por serial, modelo ou operadora — substitui o dropdown nativo; selecionar fecha o dropdown, limpar desvincula a máquina
 - Custo mensal gera despesa `aluguel_pdv` em `platform_entries` — aparece no P&L da BE
 - **Cobrança automática**: mesmo Cron Job do último dia do mês cobre PDVs não bonificados e ativos
   - Anti-duplicata por `pdv_location_id + reference_month`
