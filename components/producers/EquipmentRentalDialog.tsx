@@ -60,15 +60,31 @@ export default function EquipmentRentalDialog({ open, onOpenChange, producerId, 
   const [selectedProducerId, setSelectedProducerId] = useState(producerId)
   const [producerSearch, setProducerSearch] = useState('')
   const [showDropdown, setShowDropdown] = useState(false)
+  const [liveProducers, setLiveProducers] = useState<Producer[]>([])
   const dropdownRef = useRef<HTMLDivElement>(null)
 
   const [machineSearch, setMachineSearch] = useState('')
   const [machineOpen, setMachineOpen] = useState(false)
   const machineRef = useRef<HTMLDivElement>(null)
 
-  const filteredProducers = producers
-    ? producers.filter(p => p.full_name.toLowerCase().includes(producerSearch.toLowerCase())).slice(0, 10)
-    : []
+  // Busca produtores ao vivo no Supabase conforme o usuário digita
+  useEffect(() => {
+    if (!standalone) return
+    if (producerSearch.trim().length < 1) { setLiveProducers([]); return }
+    const t = setTimeout(async () => {
+      const { data } = await supabase
+        .from('producers')
+        .select('id, full_name, email, phone')
+        .ilike('full_name', `%${producerSearch.trim()}%`)
+        .order('full_name')
+        .limit(10)
+      setLiveProducers((data ?? []) as Producer[])
+    }, 250)
+    return () => clearTimeout(t)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [producerSearch, standalone])
+
+  const filteredProducers = liveProducers
 
   const filteredMachines = (machines ?? []).filter(m => {
     const q = machineSearch.toLowerCase()
