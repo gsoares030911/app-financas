@@ -59,6 +59,11 @@ Página `/dashboard/equipamentos` com duas abas:
   - Anti-duplicata por `pdv_location_id + reference_month`
   - Botão manual **"Gerar despesas do mês"** disponível como fallback
 
+**Chips de filtro por aba**
+- **Equipamentos de Produtor**: Todos · Ativos · Inativos (sem "Dev. à Operadora" — status irrelevante para contratos)
+- **Pontos de Venda**: Todos · Ativos · Inativos · Bonificadas (sem "Dev. à Operadora")
+- **Máquinas**: Todos · No escritório · Com Produtor · No PDV · Dev. à Operadora
+
 **Aba — Máquinas**
 - **Importação via Excel**: botão "Importar Excel" abre seletor de arquivo `.xlsx`; colunas esperadas: `modelo` (serial) e `instalação` (data). Operadora padrão: `Rede`. Anti-duplicidade por `serial_number` — máquinas já cadastradas são ignoradas, exibindo contagem antes de confirmar.
 - **Reverter devolução**: ao editar uma máquina marcada como "Dev. à Operadora", aparece bloco laranja com botão "Reverter devolução" — retorna ao status "No escritório" e limpa a data de devolução.
@@ -73,7 +78,7 @@ Página `/dashboard/equipamentos` com duas abas:
 - **Ativo** (verde) · **Inativo** (cinza) · **Dev. à Operadora** (vermelho)
 - Marcar **"Máquina devolvida à Operadora"** desativa o contrato automaticamente, registra a data de devolução e exibe badge vermelho — indica que o equipamento saiu do inventário (não está com o produtor, nem no PDV, nem conosco)
 - Cron ignora automaticamente registros devolvidos à operadora (pois `is_active = false`)
-- **Chips de filtro clicáveis** na barra acima de cada tabela: Todos · Ativos · Inativos · Dev. à Operadora (+ Bonificadas na aba PDV) — seleção destaca o chip e filtra a tabela instantaneamente
+- **Chips de filtro clicáveis** na barra acima de cada tabela — seleção destaca o chip e filtra a tabela instantaneamente
 - **Ordenação por coluna**: clique em qualquer cabeçalho para ordenar crescente/decrescente (ícone ⇅/↑/↓); Equipamentos: Código, Equipamento, Produtor, Valor/Mês, Dia Cob., Início, Fim, Status; PDVs: PDV, Loja Parceira, Telefone, Custo/Mês, Dia Cob., Status
 
 **Infraestrutura**
@@ -107,6 +112,8 @@ Página `/dashboard/equipamentos` com duas abas:
   - `financeiro_bilheteria`: acesso a Dashboard, Produtores, OPs e Bilheteria (sem Configurações/Logs)
 
 ## Interface
+
+- **Caracteres especiais**: a API de bilheteria retorna texto em Windows-1252 (encoding legado); a rota `/api/bilheteria/pagamentos` decodifica corretamente com `TextDecoder('windows-1252')` antes do `JSON.parse`, preservando aspas tipográficas, acentos e outros caracteres nos nomes de espetáculos.
 
 - **Máscara de moeda brasileira** em todos os campos de dinheiro (componente `CurrencyInput`): comportamento estilo ATM — dígitos preenchem da direita para a esquerda, últimos 2 são centavos. Ex: digitar `9000` exibe `R$ 90,00` em tempo real. Prefixo `R$` fixo, `inputMode="numeric"` para teclado numérico no celular.
 
