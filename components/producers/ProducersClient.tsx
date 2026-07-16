@@ -655,7 +655,7 @@ export default function ProducersClient({
                       <td className="px-4 py-3 text-gray-500">{producer.phone ?? '—'}</td>
                       <td className="px-4 py-3 text-gray-500 font-mono text-xs">{producer.pix_key ?? '—'}</td>
                       <td className="px-4 py-3 text-center">
-                        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full whitespace-nowrap ${
                           balance >= 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
                         }`}>
                           {balance >= 0 ? 'A pagar' : 'Devendo'}
