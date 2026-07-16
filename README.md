@@ -74,7 +74,8 @@ Página `/dashboard/equipamentos` com duas abas:
   - Máquinas **No PDV** exibem o nome da **Loja Parceira** (`store_name`) como localização — não o nome interno do PDV
   - `is_active` controla faturamento; `returned_to_network` controla localização física (independentes)
 - **Devolução em massa**: checkboxes por linha + "Devolver Selecionadas (N)" — marca as máquinas como devolvidas e encerra automaticamente todos os contratos de aluguel e PDVs vinculados (mesmo bonificados)
-- **Seletor de máquina filtrado**: ao cadastrar/editar contrato, só aparecem as máquinas com status "No escritório" (ou a já vinculada ao contrato atual) — impede vincular a mesma máquina a dois produtores
+- **Autocomplete de máquina**: ao cadastrar/editar contrato (Equipamentos de Produtor e Pontos de Venda), campo de texto filtrável por serial, modelo ou operadora substitui o dropdown nativo — digitar qualquer parte filtra em tempo real; edição pré-preenche o label da máquina já vinculada
+- **Seletor de máquina filtrado**: só aparecem as máquinas com status "No escritório" (ou a já vinculada ao contrato atual) — impede vincular a mesma máquina a dois produtores
 
 **Status de máquinas (Equipamentos e PDVs)**
 - **Ativo** (verde) · **Inativo** (cinza) · **Dev. à Operadora** (vermelho)
