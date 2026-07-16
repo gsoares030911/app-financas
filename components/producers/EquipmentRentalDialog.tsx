@@ -62,9 +62,22 @@ export default function EquipmentRentalDialog({ open, onOpenChange, producerId, 
   const [showDropdown, setShowDropdown] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
 
+  const [machineSearch, setMachineSearch] = useState('')
+  const [machineOpen, setMachineOpen] = useState(false)
+  const machineRef = useRef<HTMLDivElement>(null)
+
   const filteredProducers = producers
     ? producers.filter(p => p.full_name.toLowerCase().includes(producerSearch.toLowerCase())).slice(0, 10)
     : []
+
+  const filteredMachines = (machines ?? []).filter(m => {
+    const q = machineSearch.toLowerCase()
+    return (
+      m.serial_number.toLowerCase().includes(q) ||
+      m.model.toLowerCase().includes(q) ||
+      m.operator.toLowerCase().includes(q)
+    )
+  })
 
   useEffect(() => {
     if (rental) {
@@ -85,8 +98,11 @@ export default function EquipmentRentalDialog({ open, onOpenChange, producerId, 
         setSelectedProducerId(rental.producer_id)
         setProducerSearch(p?.full_name ?? '')
       }
+      const linked = (machines ?? []).find(m => m.id === rental.machine_id)
+      setMachineSearch(linked ? `${linked.serial_number} — ${linked.model} (${linked.operator})` : '')
     } else {
       setForm(EMPTY)
+      setMachineSearch('')
       if (standalone) {
         setSelectedProducerId('')
         setProducerSearch('')
@@ -98,6 +114,9 @@ export default function EquipmentRentalDialog({ open, onOpenChange, producerId, 
     function handleClick(e: MouseEvent) {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
         setShowDropdown(false)
+      }
+      if (machineRef.current && !machineRef.current.contains(e.target as Node)) {
+        setMachineOpen(false)
       }
     }
     document.addEventListener('mousedown', handleClick)
@@ -214,19 +233,39 @@ export default function EquipmentRentalDialog({ open, onOpenChange, producerId, 
           {/* Máquina */}
           <div className="space-y-2">
             <Label>Máquina *</Label>
-            <select
-              value={form.machine_id}
-              onChange={e => set('machine_id', e.target.value)}
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring"
-              required
-            >
-              <option value="">— Selecione uma máquina —</option>
-              {(machines ?? []).map(m => (
-                <option key={m.id} value={m.id}>
-                  {m.serial_number} — {m.model} ({m.operator})
-                </option>
-              ))}
-            </select>
+            <div ref={machineRef} className="relative">
+              <Input
+                value={machineSearch}
+                onChange={e => {
+                  setMachineSearch(e.target.value)
+                  setMachineOpen(true)
+                  if (!e.target.value) set('machine_id', '')
+                }}
+                onFocus={() => setMachineOpen(true)}
+                placeholder="Digite para buscar por serial, modelo ou operadora..."
+                autoComplete="off"
+              />
+              {machineOpen && (
+                <div className="absolute z-50 mt-1 w-full max-h-56 overflow-y-auto rounded-md border bg-white shadow-lg">
+                  {filteredMachines.map(m => (
+                    <div
+                      key={m.id}
+                      className={`px-3 py-2 text-sm cursor-pointer hover:bg-blue-50 ${form.machine_id === m.id ? 'bg-blue-100 font-medium text-blue-800' : 'text-gray-800'}`}
+                      onMouseDown={() => {
+                        set('machine_id', m.id)
+                        setMachineSearch(`${m.serial_number} — ${m.model} (${m.operator})`)
+                        setMachineOpen(false)
+                      }}
+                    >
+                      {m.serial_number} — {m.model} ({m.operator})
+                    </div>
+                  ))}
+                  {filteredMachines.length === 0 && (
+                    <div className="px-3 py-2 text-sm text-gray-400">Nenhuma máquina encontrada</div>
+                  )}
+                </div>
+              )}
+            </div>
             {(!machines || machines.length === 0) && (
               <p className="text-xs text-amber-600">Cadastre máquinas na aba Máquinas primeiro.</p>
             )}
