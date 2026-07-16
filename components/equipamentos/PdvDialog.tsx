@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
@@ -42,6 +42,28 @@ export default function PdvDialog({ open, onOpenChange, pdv, machines }: Props) 
   const supabase = createClient()
   const [form, setForm] = useState<PdvLocationFormData>(EMPTY)
   const [loading, setLoading] = useState(false)
+  const [machineSearch, setMachineSearch] = useState('')
+  const [machineOpen, setMachineOpen] = useState(false)
+  const machineRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (machineRef.current && !machineRef.current.contains(e.target as Node)) {
+        setMachineOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  const filteredMachines = (machines ?? []).filter(m => {
+    const q = machineSearch.toLowerCase()
+    return (
+      m.serial_number.toLowerCase().includes(q) ||
+      m.model.toLowerCase().includes(q) ||
+      m.operator.toLowerCase().includes(q)
+    )
+  })
 
   useEffect(() => {
     if (pdv) {
@@ -59,8 +81,11 @@ export default function PdvDialog({ open, onOpenChange, pdv, machines }: Props) 
         notes: pdv.notes ?? '',
         machine_id: pdv.machine_id ?? '',
       })
+      const linked = (machines ?? []).find(m => m.id === pdv.machine_id)
+      setMachineSearch(linked ? `${linked.serial_number} — ${linked.model} (${linked.operator})` : '')
     } else {
       setForm(EMPTY)
+      setMachineSearch('')
     }
   }, [pdv, open])
 
@@ -264,18 +289,45 @@ export default function PdvDialog({ open, onOpenChange, pdv, machines }: Props) 
           {machines && machines.length > 0 && (
             <div className="space-y-2">
               <Label>Máquina (opcional)</Label>
-              <select
-                value={form.machine_id}
-                onChange={e => set('machine_id', e.target.value)}
-                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring"
-              >
-                <option value="">— Sem máquina vinculada —</option>
-                {machines.map(m => (
-                  <option key={m.id} value={m.id}>
-                    {m.serial_number} — {m.model} ({m.operator})
-                  </option>
-                ))}
-              </select>
+              <div ref={machineRef} className="relative">
+                <Input
+                  value={machineSearch}
+                  onChange={e => {
+                    setMachineSearch(e.target.value)
+                    setMachineOpen(true)
+                    if (!e.target.value) set('machine_id', '')
+                  }}
+                  onFocus={() => setMachineOpen(true)}
+                  placeholder="Digite para buscar por serial, modelo ou operadora..."
+                  autoComplete="off"
+                />
+                {machineOpen && (
+                  <div className="absolute z-50 mt-1 w-full max-h-56 overflow-y-auto rounded-md border bg-white shadow-lg">
+                    <div
+                      className="px-3 py-2 text-sm text-gray-400 cursor-pointer hover:bg-gray-50"
+                      onMouseDown={() => { set('machine_id', ''); setMachineSearch(''); setMachineOpen(false) }}
+                    >
+                      — Sem máquina vinculada —
+                    </div>
+                    {filteredMachines.map(m => (
+                      <div
+                        key={m.id}
+                        className={`px-3 py-2 text-sm cursor-pointer hover:bg-blue-50 ${form.machine_id === m.id ? 'bg-blue-100 font-medium text-blue-800' : 'text-gray-800'}`}
+                        onMouseDown={() => {
+                          set('machine_id', m.id)
+                          setMachineSearch(`${m.serial_number} — ${m.model} (${m.operator})`)
+                          setMachineOpen(false)
+                        }}
+                      >
+                        {m.serial_number} — {m.model} ({m.operator})
+                      </div>
+                    ))}
+                    {filteredMachines.length === 0 && (
+                      <div className="px-3 py-2 text-sm text-gray-400">Nenhuma máquina encontrada</div>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
