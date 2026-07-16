@@ -149,7 +149,7 @@ export default function EquipamentosClient({ rentals: initialRentals, producers,
       if (p.returned_to_network) {
         map.set(p.machine_id, { status: 'devolvida', location_name: null, location_since: p.returned_at })
       } else {
-        map.set(p.machine_id, { status: 'pdv', location_name: p.name, location_since: null })
+        map.set(p.machine_id, { status: 'pdv', location_name: p.store_name, location_since: null })
       }
     }
 
