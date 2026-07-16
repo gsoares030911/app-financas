@@ -69,8 +69,9 @@ Página `/dashboard/equipamentos` com duas abas:
 - **Importação via Excel**: botão "Importar Excel" abre seletor de arquivo `.xlsx`; colunas esperadas: `modelo` (serial) e `instalação` (data). Operadora padrão: `Rede`. Anti-duplicidade por `serial_number` — máquinas já cadastradas são ignoradas, exibindo contagem antes de confirmar.
 - **Reverter devolução**: ao editar uma máquina marcada como "Dev. à Operadora", aparece bloco laranja com botão "Reverter devolução" — retorna ao status "No escritório" e limpa a data de devolução.
 - **Data de devolução visível**: máquinas devolvidas exibem "Devolvida em DD/MM/AAAA" abaixo do badge na coluna Status/Localização — histórico sem coluna extra.
-- Rastreamento físico de cada equipamento: **No escritório** · **Com Produtor** · **Devolvida**
+- Rastreamento físico de cada equipamento: **No escritório** · **Com Produtor** · **No PDV** · **Devolvida**
   - Status derivado em 3 camadas: `returned_to_network` na máquina (prioridade máxima) → contrato de aluguel/PDV ativo sem devolução → no escritório
+  - Máquinas **No PDV** exibem o nome da **Loja Parceira** (`store_name`) como localização — não o nome interno do PDV
   - `is_active` controla faturamento; `returned_to_network` controla localização física (independentes)
 - **Devolução em massa**: checkboxes por linha + "Devolver Selecionadas (N)" — marca as máquinas como devolvidas e encerra automaticamente todos os contratos de aluguel e PDVs vinculados (mesmo bonificados)
 - **Seletor de máquina filtrado**: ao cadastrar/editar contrato, só aparecem as máquinas com status "No escritório" (ou a já vinculada ao contrato atual) — impede vincular a mesma máquina a dois produtores
