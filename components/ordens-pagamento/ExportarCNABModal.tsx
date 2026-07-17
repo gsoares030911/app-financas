@@ -9,7 +9,7 @@ import { saveCnabConfig } from '@/app/actions/cnabConfig'
 import { toast } from 'sonner'
 import type { PaymentOrder, Producer } from '@/lib/types'
 
-type ProducerBankInfo = Pick<Producer, 'id' | 'full_name' | 'bank_name' | 'bank_agency' | 'bank_account' | 'pix_key'>
+type ProducerBankInfo = Pick<Producer, 'id' | 'full_name' | 'cpf_cnpj' | 'bank_name' | 'bank_agency' | 'bank_account' | 'pix_key'>
 
 interface Props {
   orders: PaymentOrder[]
@@ -60,6 +60,7 @@ export default function ExportarCNABModal({ orders, producers, cnabConfig, onClo
     orders.forEach(order => {
       const prod = producerMap.get(order.producer_id)
       if (!prod) { e.push(`Produtor não encontrado para OP ${order.order_number}`); return }
+      if (!prod.cpf_cnpj) e.push(`${prod.full_name}: CPF/CNPJ não cadastrado (obrigatório para CNAB)`)
       const hasPix = !!prod.pix_key?.trim()
       if (!hasPix) {
         if (!prod.bank_agency)  e.push(`${prod.full_name}: agência não cadastrada (sem chave PIX)`)
@@ -98,6 +99,7 @@ export default function ExportarCNABModal({ orders, producers, cnabConfig, onClo
       return {
         ordemNumero:    order.order_number,
         nomeFavorecido: prod.full_name,
+        cpfCnpj:        prod.cpf_cnpj ?? undefined,
         banco:          prod.bank_name   ?? '',
         agencia:        prod.bank_agency ?? '',
         conta:          prod.bank_account ?? '',

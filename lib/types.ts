@@ -75,6 +75,7 @@ export interface Producer {
   full_name: string
   email: string | null
   phone: string | null
+  cpf_cnpj: string | null
   pix_key: string | null
   bank_name: string | null
   bank_agency: string | null
@@ -88,6 +89,7 @@ export interface ProducerFormData {
   full_name: string
   email: string
   phone: string
+  cpf_cnpj: string
   pix_key: string
   bank_name: string
   bank_agency: string

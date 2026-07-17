@@ -16,7 +16,7 @@ export default async function OrdensPagamentoPage() {
       .order('created_at', { ascending: false }),
     supabase
       .from('producers')
-      .select('id, full_name, bank_name, bank_agency, bank_account, pix_key')
+      .select('id, full_name, cpf_cnpj, bank_name, bank_agency, bank_account, pix_key')
       .order('full_name'),
     getCnabConfig(),
   ])
@@ -31,7 +31,7 @@ export default async function OrdensPagamentoPage() {
       </div>
       <OrdensListClient
         orders={(orders ?? []) as PaymentOrder[]}
-        producers={(producers ?? []) as Pick<Producer, 'id' | 'full_name' | 'bank_name' | 'bank_agency' | 'bank_account' | 'pix_key'>[]}
+        producers={(producers ?? []) as Pick<Producer, 'id' | 'full_name' | 'cpf_cnpj' | 'bank_name' | 'bank_agency' | 'bank_account' | 'pix_key'>[]}
         cnabConfig={cnabConfig}
       />
     </div>

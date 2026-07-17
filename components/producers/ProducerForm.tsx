@@ -23,6 +23,7 @@ const EMPTY: ProducerFormData = {
   full_name: '',
   email: '',
   phone: '',
+  cpf_cnpj: '',
   pix_key: '',
   bank_name: '',
   bank_agency: '',
@@ -43,6 +44,7 @@ export default function ProducerForm({ open, onOpenChange, producer, onUpdate }:
         full_name: producer.full_name,
         email: producer.email ?? '',
         phone: producer.phone ?? '',
+        cpf_cnpj: producer.cpf_cnpj ?? '',
         pix_key: producer.pix_key ?? '',
         bank_name: producer.bank_name ?? '',
         bank_agency: producer.bank_agency ?? '',
@@ -69,6 +71,7 @@ export default function ProducerForm({ open, onOpenChange, producer, onUpdate }:
         full_name: form.full_name.trim(),
         email: form.email.trim() || null,
         phone: form.phone.trim() || null,
+        cpf_cnpj: form.cpf_cnpj.replace(/\D/g, '') || null,
         pix_key: form.pix_key.trim() || null,
         bank_name: form.bank_name.trim() || null,
         bank_agency: form.bank_agency.trim() || null,
@@ -140,6 +143,17 @@ export default function ProducerForm({ open, onOpenChange, producer, onUpdate }:
                 placeholder="(11) 99999-9999"
               />
             </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="cpf_cnpj">CPF / CNPJ do Favorecido</Label>
+            <Input
+              id="cpf_cnpj"
+              value={form.cpf_cnpj}
+              onChange={e => set('cpf_cnpj', e.target.value)}
+              placeholder="000.000.000-00 ou 00.000.000/0001-00"
+            />
+            <p className="text-xs text-gray-400">Obrigatório para gerar arquivo CNAB 240 (TED e PIX)</p>
           </div>
 
           <div className="space-y-2">
