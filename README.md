@@ -36,6 +36,7 @@ Sistema de gestão financeira da plataforma Bilheteria Express, desenvolvido com
   - Suporte a **PIX** (lote forma `45`, Segmento A + B) e **TED** (lote forma `41`) no mesmo arquivo
   - PIX tem prioridade: produtores com chave PIX cadastrada usam lote PIX; demais usam TED
   - Detecção automática do tipo de chave PIX (CPF/CNPJ, e-mail, telefone, aleatória)
+  - **CPF/CNPJ do favorecido** obrigatório: Segmento B PIX (pos 18-32) e Segmento A TED (pos 204-217) — campo cadastrado no perfil do produtor; modal CNAB valida antes de gerar
   - Config da empresa pagadora salva no Supabase (compartilhada entre usuários/máquinas)
 - Documento imprimível por OP com dados do produtor, eventos e conta corrente
   - Coluna **Despesas** na tabela de eventos: soma real de todos os débitos (`account_entries`) vinculados ao evento — inclui taxa cartão/PIX, taxa de impressão, voucher/dinheiro e demais débitos (não apenas a taxa da plataforma)
