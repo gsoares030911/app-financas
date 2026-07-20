@@ -288,7 +288,8 @@ export default function ProducersClient({
         return
       }
 
-      // Pagina 1000/vez para contornar o limite do PostgREST com o anon key
+      // Etapa 1: busca todos os produtores paginando 1000/vez
+      toast.info('Buscando produtores existentes…')
       const allExisting: { id: string; full_name: string }[] = []
       let from = 0
       while (true) {
@@ -296,12 +297,13 @@ export default function ProducersClient({
           .from('producers')
           .select('id, full_name')
           .range(from, from + 999)
-        if (pageErr) throw new Error(pageErr.message)
+        if (pageErr) throw new Error('Etapa 1 – ' + pageErr.message)
         if (!page || page.length === 0) break
         allExisting.push(...page)
         if (page.length < 1000) break
         from += 1000
       }
+
       const existingMap = new Map(allExisting.map(p => [p.full_name.toLowerCase().trim(), p.id]))
       const norm = (s: string) => s.toLowerCase().trim()
 
@@ -314,42 +316,48 @@ export default function ProducersClient({
       if (msgParts.length === 0) { toast.info('Nenhum produtor encontrado na planilha.'); return }
       if (!confirm(`Importar produtores: ${msgParts.join(' · ')}?`)) return
 
-      const ops: Promise<void>[] = []
-
+      // Etapa 2: inserir novos (em lote único)
       if (toInsert.length > 0) {
-        const inserts = toInsert.map(p => ({
-          user_id: userId,
-          full_name: p.name,
-          email: p.email,
-          phone: p.phone,
-          cpf_cnpj: p.cpf_cnpj,
-          pix_key: p.pix_key,
-          bank_name: p.bank_name,
-          bank_agency: p.bank_agency,
-          bank_account: p.bank_account,
-          notes: p.notes,
+        const { error } = await supabase.from('producers').insert(
+          toInsert.map(p => ({
+            user_id: userId,
+            full_name: p.name,
+            email: p.email,
+            phone: p.phone,
+            cpf_cnpj: p.cpf_cnpj,
+            pix_key: p.pix_key,
+            bank_name: p.bank_name,
+            bank_agency: p.bank_agency,
+            bank_account: p.bank_account,
+            notes: p.notes,
+          }))
+        )
+        if (error) throw new Error('Etapa 2 – ' + error.message)
+      }
+
+      // Etapa 3: atualizar existentes em lotes de 20 (evita timeout de 2000+ requests simultâneos)
+      toast.info(`Atualizando ${toUpdate.length} produtores…`)
+      const BATCH = 20
+      for (let i = 0; i < toUpdate.length; i += BATCH) {
+        const chunk = toUpdate.slice(i, i + BATCH)
+        await Promise.all(chunk.map(async p => {
+          const id = existingMap.get(norm(p.name))!
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const patch: Record<string, any> = {}
+          if (p.email)        patch.email        = p.email
+          if (p.phone)        patch.phone        = p.phone
+          if (p.cpf_cnpj)     patch.cpf_cnpj     = p.cpf_cnpj
+          if (p.pix_key)      patch.pix_key      = p.pix_key
+          if (p.bank_name)    patch.bank_name    = p.bank_name
+          if (p.bank_agency)  patch.bank_agency  = p.bank_agency
+          if (p.bank_account) patch.bank_account = p.bank_account
+          if (p.notes)        patch.notes        = p.notes
+          if (Object.keys(patch).length > 0) {
+            const { error } = await supabase.from('producers').update(patch).eq('id', id)
+            if (error) throw new Error('Etapa 3 – ' + error.message)
+          }
         }))
-        ops.push(Promise.resolve(supabase.from('producers').insert(inserts)).then(r => { if (r.error) throw r.error }))
       }
-
-      for (const p of toUpdate) {
-        const id = existingMap.get(norm(p.name))!
-        // Só atualiza campos que o Excel fornece (não sobrescreve com null)
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const patch: Record<string, any> = {}
-        if (p.email)        patch.email        = p.email
-        if (p.phone)        patch.phone        = p.phone
-        if (p.cpf_cnpj)     patch.cpf_cnpj     = p.cpf_cnpj
-        if (p.pix_key)      patch.pix_key      = p.pix_key
-        if (p.bank_name)    patch.bank_name    = p.bank_name
-        if (p.bank_agency)  patch.bank_agency  = p.bank_agency
-        if (p.bank_account) patch.bank_account = p.bank_account
-        if (p.notes)        patch.notes        = p.notes
-        if (Object.keys(patch).length > 0)
-          ops.push(Promise.resolve(supabase.from('producers').update(patch).eq('id', id)).then(r => { if (r.error) throw r.error }))
-      }
-
-      await Promise.all(ops)
 
       const parts = []
       if (toInsert.length > 0) parts.push(`${toInsert.length} cadastrado(s)`)
