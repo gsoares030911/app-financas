@@ -2,11 +2,12 @@
 
 import { createAdminClient } from '@/lib/supabase/admin'
 
-export async function getProducerIdMap(): Promise<Map<string, string>> {
+// Retorna array de pares [normalizedName, id] — Map não é serializável em JSON
+export async function getProducerIdPairs(): Promise<[string, string][]> {
   const supabase = createAdminClient()
   const pageSize = 1000
   let from = 0
-  const allProducers: { id: string; full_name: string }[] = []
+  const pairs: [string, string][] = []
 
   while (true) {
     const { data, error } = await supabase
@@ -16,10 +17,10 @@ export async function getProducerIdMap(): Promise<Map<string, string>> {
 
     if (error) throw new Error(error.message)
     if (!data || data.length === 0) break
-    allProducers.push(...data)
+    for (const p of data) pairs.push([p.full_name.toLowerCase().trim(), p.id])
     if (data.length < pageSize) break
     from += pageSize
   }
 
-  return new Map(allProducers.map(p => [p.full_name.toLowerCase().trim(), p.id]))
+  return pairs
 }
