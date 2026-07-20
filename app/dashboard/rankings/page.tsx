@@ -43,22 +43,32 @@ export default async function RankingsPage() {
   if (!canSeeDashboard) redirect('/dashboard/producers')
 
   const [
-    { data: producers },
+    producersRes,
     { data: entries },
     { data: events },
     { data: cancelledEvents },
     { data: pendingOrders },
+    globalsRes,
   ] = await Promise.all([
     canAccessProdutores(profile.role)
-      ? supabase.from('producers').select('*').order('full_name')
-      : Promise.resolve({ data: [] }),
+      ? supabase.from('producers').select('*', { count: 'exact' }).order('full_name').limit(1000)
+      : Promise.resolve({ data: [], count: 0 }),
     supabase.from('account_entries').select('producer_id, entry_type, amount'),
     supabase.from('events').select('producer_id, gross_revenue, net_amount, status'),
     supabase.from('events').select('id, name, event_date, producer_id').eq('status', 'cancelado'),
     canSeeOrders
       ? supabase.from('payment_orders').select('*').eq('status', 'pending').order('created_at')
       : Promise.resolve({ data: [] }),
+    supabase.rpc('get_global_producer_balances'),
   ])
+
+  const producers = producersRes.data ?? []
+  const totalProducerCount = producersRes.count ?? producers.length
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const globals = (globalsRes as any).data?.[0]
+  const globalTotalToReceive = Number(globals?.total_to_receive ?? 0)
+  const globalTotalOwed      = Number(globals?.total_owed      ?? 0)
 
   const cancelledEventIds = (cancelledEvents ?? []).map(e => e.id)
   const { data: cancelledEntries } = cancelledEventIds.length > 0
@@ -80,11 +90,14 @@ export default async function RankingsPage() {
         />
       )}
       <RankingsClient
-        producers={producers ?? []}
+        producers={producers}
         entries={entries ?? []}
         events={events ?? []}
         cancelledEvents={cancelledEvents ?? []}
         cancelledEntries={cancelledEntries ?? []}
+        totalProducerCount={totalProducerCount}
+        globalTotalToReceive={globalTotalToReceive}
+        globalTotalOwed={globalTotalOwed}
       />
     </div>
   )

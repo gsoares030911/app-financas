@@ -30,11 +30,14 @@ interface Props {
   events: Pick<ProducerEvent, 'producer_id' | 'gross_revenue' | 'net_amount' | 'status'>[]
   cancelledEvents: CancelledEvent[]
   cancelledEntries: CancelledEntry[]
+  totalProducerCount: number
+  globalTotalToReceive: number
+  globalTotalOwed: number
 }
 
 const MEDAL_COLORS = ['#f59e0b', '#9ca3af', '#d97706']
 
-export default function RankingsClient({ producers, entries, events, cancelledEvents, cancelledEntries }: Props) {
+export default function RankingsClient({ producers, entries, events, cancelledEvents, cancelledEntries, totalProducerCount, globalTotalToReceive, globalTotalOwed }: Props) {
   const stats = useMemo(() => {
     return producers.map(p => {
       const pe = entries.filter(e => e.producer_id === p.id)
@@ -58,8 +61,6 @@ export default function RankingsClient({ producers, entries, events, cancelledEv
   )
 
   const globalTotalRevenue = events.reduce((s, e) => s + e.gross_revenue, 0)
-  const globalToPay = stats.filter(s => s.balance > 0).reduce((s, p) => s + p.balance, 0)
-  const globalOwed = Math.abs(stats.filter(s => s.balance < 0).reduce((s, p) => s + p.balance, 0))
 
   const pendingCollections = useMemo(() => {
     const producerMap = new Map(producers.map(p => [p.id, p]))
@@ -163,7 +164,7 @@ export default function RankingsClient({ producers, entries, events, cancelledEv
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs text-gray-500">Produtores</p>
-                <p className="text-2xl font-bold text-gray-900 mt-0.5">{producers.length}</p>
+                <p className="text-2xl font-bold text-gray-900 mt-0.5">{totalProducerCount}</p>
               </div>
               <div className="p-2.5 bg-blue-50 rounded-xl shrink-0">
                 <Users className="h-5 w-5 text-blue-600" />
@@ -189,7 +190,7 @@ export default function RankingsClient({ producers, entries, events, cancelledEv
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs text-gray-500">A Pagar</p>
-                <p className="text-xl font-bold text-blue-600 mt-0.5">{formatCurrency(globalToPay)}</p>
+                <p className="text-xl font-bold text-blue-600 mt-0.5">{formatCurrency(globalTotalToReceive)}</p>
               </div>
               <div className="p-2.5 bg-indigo-50 rounded-xl shrink-0">
                 <Trophy className="h-5 w-5 text-indigo-600" />
@@ -202,7 +203,7 @@ export default function RankingsClient({ producers, entries, events, cancelledEv
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs text-gray-500">Total Devendo</p>
-                <p className="text-xl font-bold text-red-600 mt-0.5">{formatCurrency(globalOwed)}</p>
+                <p className="text-xl font-bold text-red-600 mt-0.5">{formatCurrency(globalTotalOwed)}</p>
               </div>
               <div className="p-2.5 bg-red-50 rounded-xl shrink-0">
                 <TrendingDown className="h-5 w-5 text-red-600" />
