@@ -283,40 +283,60 @@ export default function ProducersClient({
 
       const { data: existing } = await supabase
         .from('producers')
-        .select('full_name')
+        .select('id, full_name')
         .in('full_name', parsed.map(p => p.name))
-      const existingSet = new Set((existing ?? []).map(e => e.full_name.toLowerCase()))
+      const existingMap = new Map((existing ?? []).map(e => [e.full_name.toLowerCase(), e.id]))
 
-      const toInsert = parsed.filter(p => !existingSet.has(p.name.toLowerCase()))
-      const skipped  = parsed.length - toInsert.length
+      const toInsert = parsed.filter(p => !existingMap.has(p.name.toLowerCase()))
+      const toUpdate = parsed.filter(p =>  existingMap.has(p.name.toLowerCase()))
 
-      if (toInsert.length === 0) {
-        toast.info(`Todos os ${parsed.length} produtores já estão cadastrados.`)
-        return
+      const msgParts = []
+      if (toInsert.length > 0) msgParts.push(`${toInsert.length} novo(s)`)
+      if (toUpdate.length > 0) msgParts.push(`${toUpdate.length} existente(s) serão atualizados`)
+      if (msgParts.length === 0) { toast.info('Nenhum produtor encontrado na planilha.'); return }
+      if (!confirm(`Importar produtores: ${msgParts.join(' · ')}?`)) return
+
+      const ops: Promise<void>[] = []
+
+      if (toInsert.length > 0) {
+        const inserts = toInsert.map(p => ({
+          user_id: userId,
+          full_name: p.name,
+          email: p.email,
+          phone: p.phone,
+          cpf_cnpj: p.cpf_cnpj,
+          pix_key: p.pix_key,
+          bank_name: p.bank_name,
+          bank_agency: p.bank_agency,
+          bank_account: p.bank_account,
+          notes: p.notes,
+        }))
+        ops.push(Promise.resolve(supabase.from('producers').insert(inserts)).then(r => { if (r.error) throw r.error }))
       }
 
-      const msg = skipped > 0
-        ? `Importar ${toInsert.length} produtor(es) novo(s)? (${skipped} já cadastrado(s) serão ignorados)`
-        : `Importar ${toInsert.length} produtor(es)?`
-      if (!confirm(msg)) return
+      for (const p of toUpdate) {
+        const id = existingMap.get(p.name.toLowerCase())!
+        // Só atualiza campos que o Excel fornece (não sobrescreve com null)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const patch: Record<string, any> = {}
+        if (p.email)        patch.email        = p.email
+        if (p.phone)        patch.phone        = p.phone
+        if (p.cpf_cnpj)     patch.cpf_cnpj     = p.cpf_cnpj
+        if (p.pix_key)      patch.pix_key      = p.pix_key
+        if (p.bank_name)    patch.bank_name    = p.bank_name
+        if (p.bank_agency)  patch.bank_agency  = p.bank_agency
+        if (p.bank_account) patch.bank_account = p.bank_account
+        if (p.notes)        patch.notes        = p.notes
+        if (Object.keys(patch).length > 0)
+          ops.push(Promise.resolve(supabase.from('producers').update(patch).eq('id', id)).then(r => { if (r.error) throw r.error }))
+      }
 
-      const inserts = toInsert.map(p => ({
-        user_id: userId,
-        full_name: p.name,
-        email: p.email,
-        phone: p.phone,
-        cpf_cnpj: p.cpf_cnpj,
-        pix_key: p.pix_key,
-        bank_name: p.bank_name,
-        bank_agency: p.bank_agency,
-        bank_account: p.bank_account,
-        notes: p.notes,
-      }))
+      await Promise.all(ops)
 
-      const { error } = await supabase.from('producers').insert(inserts)
-      if (error) throw error
-
-      toast.success(`${toInsert.length} produtor(es) importado(s)!${skipped > 0 ? ` (${skipped} ignorado(s))` : ''}`)
+      const parts = []
+      if (toInsert.length > 0) parts.push(`${toInsert.length} cadastrado(s)`)
+      if (toUpdate.length > 0) parts.push(`${toUpdate.length} atualizado(s)`)
+      toast.success(parts.join(' · ') + '!')
       router.refresh()
     } catch (err: unknown) {
       toast.error((err as Error).message ?? 'Erro ao importar Excel')
