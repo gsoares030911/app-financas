@@ -15,7 +15,6 @@ import type { Producer, AccountEntry } from '@/lib/types'
 import type { DateRange } from 'react-day-picker'
 import ProducerForm from './ProducerForm'
 import * as XLSX from 'xlsx'
-import { getProducerIdPairs } from '@/app/actions/producers'
 
 interface ProducerWithBalance {
   producer: Producer
@@ -289,8 +288,11 @@ export default function ProducersClient({
         return
       }
 
-      // Server Action com admin client — sem limite de linhas, busca todos os produtores
-      const existingMap = new Map(await getProducerIdPairs())
+      // API route com admin client — sem limite de linhas do PostgREST
+      const res = await fetch('/api/producers/id-pairs')
+      if (!res.ok) throw new Error('Erro ao buscar produtores existentes')
+      const pairs: [string, string][] = await res.json()
+      const existingMap = new Map(pairs)
       const norm = (s: string) => s.toLowerCase().trim()
 
       const toInsert = parsed.filter(p => !existingMap.has(norm(p.name)))
