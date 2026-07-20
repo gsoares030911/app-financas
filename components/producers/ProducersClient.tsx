@@ -258,10 +258,15 @@ export default function ProducersClient({
           const empresa = r['nomedaempresa'] || ''
           const obs     = r['observacoes'] || ''
           const notes   = [empresa && `Empresa: ${empresa}`, obs].filter(Boolean).join(' | ') || null
+          // CPF/CNPJ: prefere CNPJ (14 dígitos) se disponível, senão CPF
+          const cnpjRaw = (r['cnpj'] || '').replace(/\D/g, '')
+          const cpfRaw  = (r['cpf']  || '').replace(/\D/g, '')
+          const cpf_cnpj = cnpjRaw.length === 14 ? cnpjRaw : (cpfRaw.length === 11 ? cpfRaw : null)
           return {
             name:         r['nome'] || '',
             email:        r['email'] || null,
             phone:        r['telefone'] || null,
+            cpf_cnpj,
             pix_key:      r['pix'] || null,
             bank_name:    r['banco'] || null,
             bank_agency:  r['agencia'] || null,
@@ -300,6 +305,7 @@ export default function ProducersClient({
         full_name: p.name,
         email: p.email,
         phone: p.phone,
+        cpf_cnpj: p.cpf_cnpj,
         pix_key: p.pix_key,
         bank_name: p.bank_name,
         bank_agency: p.bank_agency,
