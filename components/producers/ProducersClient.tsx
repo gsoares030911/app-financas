@@ -288,14 +288,16 @@ export default function ProducersClient({
         return
       }
 
+      // Busca todos os produtores para comparação case-insensitive (ignora o .in() case-sensitive)
       const { data: existing } = await supabase
         .from('producers')
         .select('id, full_name')
-        .in('full_name', parsed.map(p => p.name))
-      const existingMap = new Map((existing ?? []).map(e => [e.full_name.toLowerCase(), e.id]))
+        .limit(10000)
+      const existingMap = new Map((existing ?? []).map(e => [e.full_name.toLowerCase().trim(), e.id]))
+      const norm = (s: string) => s.toLowerCase().trim()
 
-      const toInsert = parsed.filter(p => !existingMap.has(p.name.toLowerCase()))
-      const toUpdate = parsed.filter(p =>  existingMap.has(p.name.toLowerCase()))
+      const toInsert = parsed.filter(p => !existingMap.has(norm(p.name)))
+      const toUpdate = parsed.filter(p =>  existingMap.has(norm(p.name)))
 
       const msgParts = []
       if (toInsert.length > 0) msgParts.push(`${toInsert.length} novo(s)`)
@@ -322,7 +324,7 @@ export default function ProducersClient({
       }
 
       for (const p of toUpdate) {
-        const id = existingMap.get(p.name.toLowerCase())!
+        const id = existingMap.get(norm(p.name))!
         // Só atualiza campos que o Excel fornece (não sobrescreve com null)
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const patch: Record<string, any> = {}
