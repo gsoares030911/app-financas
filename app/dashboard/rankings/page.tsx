@@ -44,31 +44,39 @@ export default async function RankingsPage() {
 
   const [
     producersRes,
-    { data: entries },
-    { data: events },
     { data: cancelledEvents },
     { data: pendingOrders },
     globalsRes,
+    topDebtorsRes,
+    topSellersRes,
+    totalRevenueRes,
   ] = await Promise.all([
     canAccessProdutores(profile.role)
-      ? supabase.from('producers').select('*', { count: 'exact' }).order('full_name').limit(1000)
+      ? supabase.from('producers').select('id, full_name', { count: 'exact' }).order('full_name').limit(1000)
       : Promise.resolve({ data: [], count: 0 }),
-    supabase.from('account_entries').select('producer_id, entry_type, amount'),
-    supabase.from('events').select('producer_id, gross_revenue, net_amount, status'),
     supabase.from('events').select('id, name, event_date, producer_id').eq('status', 'cancelado'),
     canSeeOrders
       ? supabase.from('payment_orders').select('*').eq('status', 'pending').order('created_at')
       : Promise.resolve({ data: [] }),
     supabase.rpc('get_global_producer_balances'),
+    supabase.rpc('get_top_debtors', { p_limit: 10 }),
+    supabase.rpc('get_top_sellers', { p_limit: 10 }),
+    supabase.rpc('get_total_revenue'),
   ])
 
-  const producers = producersRes.data ?? []
+  const producers = (producersRes.data ?? []) as { id: string; full_name: string }[]
   const totalProducerCount = producersRes.count ?? producers.length
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const globals = (globalsRes as any).data?.[0]
   const globalTotalToReceive = Number(globals?.total_to_receive ?? 0)
   const globalTotalOwed      = Number(globals?.total_owed      ?? 0)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const topDebtors = ((topDebtorsRes as any).data ?? []) as { producer_id: string; full_name: string; balance: number }[]
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const topSellers = ((topSellersRes as any).data ?? []) as { producer_id: string; full_name: string; total_revenue: number }[]
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const globalTotalRevenue = Number((totalRevenueRes as any).data ?? 0)
 
   const cancelledEventIds = (cancelledEvents ?? []).map(e => e.id)
   const { data: cancelledEntries } = cancelledEventIds.length > 0
@@ -83,7 +91,7 @@ export default async function RankingsPage() {
       {canSeeOrders && (
         <PendingOrdersAlert
           pendingOrders={(pendingOrders ?? []) as PaymentOrder[]}
-          producers={(producers ?? []).map(p => ({ id: p.id, full_name: p.full_name }))}
+          producers={producers.map(p => ({ id: p.id, full_name: p.full_name }))}
           role={profile.role}
           isPenultimateBusinessDay={isPenultimateBusinessDay}
           penultimateDate={penultimateDate}
@@ -91,13 +99,14 @@ export default async function RankingsPage() {
       )}
       <RankingsClient
         producers={producers}
-        entries={entries ?? []}
-        events={events ?? []}
         cancelledEvents={cancelledEvents ?? []}
         cancelledEntries={cancelledEntries ?? []}
         totalProducerCount={totalProducerCount}
         globalTotalToReceive={globalTotalToReceive}
         globalTotalOwed={globalTotalOwed}
+        globalTotalRevenue={globalTotalRevenue}
+        topDebtors={topDebtors}
+        topSellers={topSellers}
       />
     </div>
   )

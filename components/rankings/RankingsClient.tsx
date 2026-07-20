@@ -8,7 +8,6 @@ import { Trophy, TrendingDown, Users, TrendingUp, AlertCircle } from 'lucide-rea
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
 } from 'recharts'
-import type { Producer, AccountEntry, ProducerEvent } from '@/lib/types'
 
 interface CancelledEvent {
   id: string
@@ -24,44 +23,43 @@ interface CancelledEntry {
   amount: number
 }
 
+interface TopDebtor {
+  producer_id: string
+  full_name: string
+  balance: number
+}
+
+interface TopSeller {
+  producer_id: string
+  full_name: string
+  total_revenue: number
+}
+
 interface Props {
-  producers: Producer[]
-  entries: Pick<AccountEntry, 'producer_id' | 'entry_type' | 'amount'>[]
-  events: Pick<ProducerEvent, 'producer_id' | 'gross_revenue' | 'net_amount' | 'status'>[]
+  producers: { id: string; full_name: string }[]
   cancelledEvents: CancelledEvent[]
   cancelledEntries: CancelledEntry[]
   totalProducerCount: number
   globalTotalToReceive: number
   globalTotalOwed: number
+  globalTotalRevenue: number
+  topDebtors: TopDebtor[]
+  topSellers: TopSeller[]
 }
 
 const MEDAL_COLORS = ['#f59e0b', '#9ca3af', '#d97706']
 
-export default function RankingsClient({ producers, entries, events, cancelledEvents, cancelledEntries, totalProducerCount, globalTotalToReceive, globalTotalOwed }: Props) {
-  const stats = useMemo(() => {
-    return producers.map(p => {
-      const pe = entries.filter(e => e.producer_id === p.id)
-      const pev = events.filter(ev => ev.producer_id === p.id)
-      const totalCredits = pe.filter(e => e.entry_type === 'credito').reduce((s, e) => s + e.amount, 0)
-      const totalDebits = pe.filter(e => e.entry_type === 'debito').reduce((s, e) => s + e.amount, 0)
-      const balance = totalCredits - totalDebits
-      const totalRevenue = pev.reduce((s, ev) => s + ev.gross_revenue, 0)
-      return { producer: p, balance, totalCredits, totalDebits, totalRevenue }
-    })
-  }, [producers, entries, events])
-
-  const topSellers = useMemo(
-    () => [...stats].sort((a, b) => b.totalRevenue - a.totalRevenue).slice(0, 10),
-    [stats]
-  )
-
-  const worstDebtors = useMemo(
-    () => [...stats].filter(s => s.balance < 0).sort((a, b) => a.balance - b.balance).slice(0, 10),
-    [stats]
-  )
-
-  const globalTotalRevenue = events.reduce((s, e) => s + e.gross_revenue, 0)
-
+export default function RankingsClient({
+  producers,
+  cancelledEvents,
+  cancelledEntries,
+  totalProducerCount,
+  globalTotalToReceive,
+  globalTotalOwed,
+  globalTotalRevenue,
+  topDebtors,
+  topSellers,
+}: Props) {
   const pendingCollections = useMemo(() => {
     const producerMap = new Map(producers.map(p => [p.id, p]))
     return cancelledEvents
@@ -77,14 +75,14 @@ export default function RankingsClient({ producers, entries, events, cancelledEv
   }, [cancelledEvents, cancelledEntries, producers])
 
   const sellersData = topSellers.map(s => ({
-    name: s.producer.full_name.split(' ')[0],
-    fullName: s.producer.full_name,
-    value: s.totalRevenue,
+    name: s.full_name.split(' ')[0],
+    fullName: s.full_name,
+    value: s.total_revenue,
   }))
 
-  const debtorsData = worstDebtors.map(s => ({
-    name: s.producer.full_name.split(' ')[0],
-    fullName: s.producer.full_name,
+  const debtorsData = topDebtors.map(s => ({
+    name: s.full_name.split(' ')[0],
+    fullName: s.full_name,
     value: Math.abs(s.balance),
   }))
 
@@ -245,15 +243,15 @@ export default function RankingsClient({ producers, entries, events, cancelledEv
                 </ResponsiveContainer>
                 <div className="mt-4 space-y-2">
                   {topSellers.map((s, i) => (
-                    <div key={s.producer.id} className="flex items-center gap-3">
+                    <div key={s.producer_id} className="flex items-center gap-3">
                       <span
                         className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0"
                         style={{ background: i < 3 ? MEDAL_COLORS[i] : '#60a5fa' }}
                       >
                         {i + 1}
                       </span>
-                      <span className="flex-1 text-sm text-gray-700 truncate">{s.producer.full_name}</span>
-                      <span className="text-sm font-semibold text-green-600 shrink-0">{formatCurrency(s.totalRevenue)}</span>
+                      <span className="flex-1 text-sm text-gray-700 truncate">{s.full_name}</span>
+                      <span className="text-sm font-semibold text-green-600 shrink-0">{formatCurrency(s.total_revenue)}</span>
                     </div>
                   ))}
                 </div>
@@ -271,7 +269,7 @@ export default function RankingsClient({ producers, entries, events, cancelledEv
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {worstDebtors.length === 0 ? (
+            {topDebtors.length === 0 ? (
               <p className="text-center text-gray-400 py-10 text-sm">
                 Nenhum produtor com saldo devedor
               </p>
@@ -290,15 +288,15 @@ export default function RankingsClient({ producers, entries, events, cancelledEv
                   </BarChart>
                 </ResponsiveContainer>
                 <div className="mt-4 space-y-2">
-                  {worstDebtors.map((s, i) => (
-                    <div key={s.producer.id} className="flex items-center gap-3">
+                  {topDebtors.map((s, i) => (
+                    <div key={s.producer_id} className="flex items-center gap-3">
                       <span
                         className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0"
                         style={{ background: `hsl(0,${65 + i * 3}%,${58 - i * 4}%)` }}
                       >
                         {i + 1}
                       </span>
-                      <span className="flex-1 text-sm text-gray-700 truncate">{s.producer.full_name}</span>
+                      <span className="flex-1 text-sm text-gray-700 truncate">{s.full_name}</span>
                       <span className="text-sm font-semibold text-red-600 shrink-0">
                         −{formatCurrency(Math.abs(s.balance))}
                       </span>
