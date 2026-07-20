@@ -37,6 +37,11 @@ interface Props {
   totalPages: number
   totalCount: number
   searchQuery: string
+  globalTotalToReceive: number
+  globalTotalOwed: number
+  globalCountToReceive: number
+  globalCountOwed: number
+  globalCountZero: number
 }
 
 type BalanceFilter = 'todos' | 'a_pagar' | 'devendo' | 'zerado'
@@ -47,6 +52,8 @@ type PeriodEntry = Pick<AccountEntry, 'producer_id' | 'event_id' | 'entry_type' 
 export default function ProducersClient({
   producers, entries, paidOrders, emittedEventIds, userId,
   page, totalPages, totalCount, searchQuery,
+  globalTotalToReceive, globalTotalOwed,
+  globalCountToReceive, globalCountOwed, globalCountZero,
 }: Props) {
   const router = useRouter()
   const supabase = createClient()
@@ -445,7 +452,7 @@ export default function ProducersClient({
                 <p className="text-2xl font-bold text-green-600">
                   {periodActive
                     ? (periodLoading ? '…' : formatCurrency(periodTotal))
-                    : formatCurrency(totalToReceive)}
+                    : formatCurrency(globalTotalToReceive)}
                 </p>
               </div>
               <div className="p-3 bg-green-50 rounded-full">
@@ -471,7 +478,7 @@ export default function ProducersClient({
                 <>
                   <div>
                     <p className="text-sm text-gray-500">Devendo</p>
-                    <p className="text-2xl font-bold text-red-600">{formatCurrency(totalOwed)}</p>
+                    <p className="text-2xl font-bold text-red-600">{formatCurrency(globalTotalOwed)}</p>
                   </div>
                   <div className="p-3 bg-red-50 rounded-full">
                     <TrendingDown className="h-5 w-5 text-red-600" />
@@ -548,10 +555,10 @@ export default function ProducersClient({
         <div className="flex flex-wrap gap-2 text-sm">
           {(
             [
-              { key: 'todos',    label: `Todos (${producersWithBalance.length})` },
-              { key: 'a_pagar', label: `A pagar (${producersWithBalance.filter(p => p.balance > 0).length})`,  activeClass: 'bg-green-600 text-white border-green-600',  inactiveClass: 'text-green-700 border-green-300 hover:bg-green-50' },
-              { key: 'devendo',  label: `Devendo (${producersWithBalance.filter(p => p.balance < 0).length})`, activeClass: 'bg-red-600 text-white border-red-600',      inactiveClass: 'text-red-700 border-red-300 hover:bg-red-50' },
-              { key: 'zerado',   label: `Zerado (${producersWithBalance.filter(p => p.balance === 0).length})`,activeClass: 'bg-gray-500 text-white border-gray-500',    inactiveClass: 'text-gray-600 border-gray-300 hover:bg-gray-50' },
+              { key: 'todos',    label: `Todos (${totalCount})` },
+              { key: 'a_pagar', label: `A pagar (${globalCountToReceive})`,  activeClass: 'bg-green-600 text-white border-green-600',  inactiveClass: 'text-green-700 border-green-300 hover:bg-green-50' },
+              { key: 'devendo',  label: `Devendo (${globalCountOwed})`, activeClass: 'bg-red-600 text-white border-red-600',      inactiveClass: 'text-red-700 border-red-300 hover:bg-red-50' },
+              { key: 'zerado',   label: `Zerado (${globalCountZero})`,activeClass: 'bg-gray-500 text-white border-gray-500',    inactiveClass: 'text-gray-600 border-gray-300 hover:bg-gray-50' },
             ] as { key: BalanceFilter; label: string; activeClass?: string; inactiveClass?: string }[]
           ).map(chip => {
             const isActive = balanceFilter === chip.key

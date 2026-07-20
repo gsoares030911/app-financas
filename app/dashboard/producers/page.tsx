@@ -34,7 +34,7 @@ export default async function ProducersPage({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const producerIds = (producers ?? []).map((p: any) => p.id)
 
-  const [entriesRes, ordersRes] = producerIds.length > 0
+  const [entriesRes, ordersRes, globalsRes] = producerIds.length > 0
     ? await Promise.all([
         supabase
           .from('account_entries')
@@ -44,8 +44,9 @@ export default async function ProducersPage({
           .from('payment_orders')
           .select('producer_id, amount, status, event_ids')
           .in('producer_id', producerIds),
+        supabase.rpc('get_global_producer_balances'),
       ])
-    : [{ data: [] }, { data: [] }]
+    : [{ data: [] }, { data: [] }, { data: null }]
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const allOrders = (ordersRes.data ?? []) as any[]
@@ -53,6 +54,14 @@ export default async function ProducersPage({
     .filter(o => o.status === 'paid')
     .map(o => ({ producer_id: o.producer_id, amount: o.amount }))
   const emittedEventIds = [...new Set(allOrders.flatMap(o => o.event_ids ?? []))]
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const globals = (globalsRes as any).data?.[0]
+  const globalTotalToReceive = Number(globals?.total_to_receive ?? 0)
+  const globalTotalOwed      = Number(globals?.total_owed      ?? 0)
+  const globalCountToReceive = Number(globals?.count_to_receive ?? 0)
+  const globalCountOwed      = Number(globals?.count_owed      ?? 0)
+  const globalCountZero      = Number(globals?.count_zero      ?? 0)
 
   return (
     <ProducersClient
@@ -65,6 +74,11 @@ export default async function ProducersPage({
       totalPages={totalPages}
       totalCount={totalCount}
       searchQuery={q}
+      globalTotalToReceive={globalTotalToReceive}
+      globalTotalOwed={globalTotalOwed}
+      globalCountToReceive={globalCountToReceive}
+      globalCountOwed={globalCountOwed}
+      globalCountZero={globalCountZero}
     />
   )
 }
