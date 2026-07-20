@@ -288,11 +288,21 @@ export default function ProducersClient({
         return
       }
 
-      // API route com admin client — sem limite de linhas do PostgREST
-      const res = await fetch('/api/producers/id-pairs')
-      const resJson = await res.json()
-      if (!res.ok) throw new Error(resJson?.error ?? 'Erro ao buscar produtores existentes')
-      const existingMap = new Map(resJson as [string, string][])
+      // Pagina 1000/vez para contornar o limite do PostgREST com o anon key
+      const allExisting: { id: string; full_name: string }[] = []
+      let from = 0
+      while (true) {
+        const { data: page, error: pageErr } = await supabase
+          .from('producers')
+          .select('id, full_name')
+          .range(from, from + 999)
+        if (pageErr) throw new Error(pageErr.message)
+        if (!page || page.length === 0) break
+        allExisting.push(...page)
+        if (page.length < 1000) break
+        from += 1000
+      }
+      const existingMap = new Map(allExisting.map(p => [p.full_name.toLowerCase().trim(), p.id]))
       const norm = (s: string) => s.toLowerCase().trim()
 
       const toInsert = parsed.filter(p => !existingMap.has(norm(p.name)))
