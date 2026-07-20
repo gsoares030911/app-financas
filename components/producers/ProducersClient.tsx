@@ -15,6 +15,7 @@ import type { Producer, AccountEntry } from '@/lib/types'
 import type { DateRange } from 'react-day-picker'
 import ProducerForm from './ProducerForm'
 import * as XLSX from 'xlsx'
+import { getProducerIdMap } from '@/app/actions/producers'
 
 interface ProducerWithBalance {
   producer: Producer
@@ -288,12 +289,8 @@ export default function ProducersClient({
         return
       }
 
-      // Busca todos os produtores para comparação case-insensitive (ignora o .in() case-sensitive)
-      const { data: existing } = await supabase
-        .from('producers')
-        .select('id, full_name')
-        .limit(10000)
-      const existingMap = new Map((existing ?? []).map(e => [e.full_name.toLowerCase().trim(), e.id]))
+      // Server Action com admin client — sem limite de linhas, busca todos os produtores
+      const existingMap = await getProducerIdMap()
       const norm = (s: string) => s.toLowerCase().trim()
 
       const toInsert = parsed.filter(p => !existingMap.has(norm(p.name)))
