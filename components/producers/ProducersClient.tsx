@@ -290,9 +290,9 @@ export default function ProducersClient({
 
       // API route com admin client — sem limite de linhas do PostgREST
       const res = await fetch('/api/producers/id-pairs')
-      if (!res.ok) throw new Error('Erro ao buscar produtores existentes')
-      const pairs: [string, string][] = await res.json()
-      const existingMap = new Map(pairs)
+      const resJson = await res.json()
+      if (!res.ok) throw new Error(resJson?.error ?? 'Erro ao buscar produtores existentes')
+      const existingMap = new Map(resJson as [string, string][])
       const norm = (s: string) => s.toLowerCase().trim()
 
       const toInsert = parsed.filter(p => !existingMap.has(norm(p.name)))
