@@ -18,6 +18,7 @@ interface Props {
   orders: PaymentOrder[]
   producers: ProducerBankInfo[]
   cnabConfig?: Partial<EmpresaConfig>
+  netPeriodTotal?: number
 }
 
 type TabStatus = 'pending' | 'paid'
@@ -29,7 +30,7 @@ function fmtDate(d: string) {
   })
 }
 
-export default function OrdensListClient({ orders: initialOrders, producers, cnabConfig }: Props) {
+export default function OrdensListClient({ orders: initialOrders, producers, cnabConfig, netPeriodTotal }: Props) {
   const supabase = createClient()
   const router = useRouter()
   const [orders, setOrders] = useState<PaymentOrder[]>(initialOrders)
@@ -73,12 +74,14 @@ export default function OrdensListClient({ orders: initialOrders, producers, cna
   async function confirmPaymentBulk() {
     if (selectedOrders.length === 0) return
 
-    const totalAmount = selectedOrders.reduce((s, o) => s + Number(o.amount), 0)
+    const totalAmount = allSelected && netPeriodTotal !== undefined
+      ? netPeriodTotal
+      : selectedOrders.reduce((s, o) => s + Number(o.amount), 0)
     const totalEvents = selectedOrders.reduce((s, o) => s + o.event_ids.length, 0)
 
     if (!confirm(
       `Confirmar pagamento de ${selectedOrders.length} ordem${selectedOrders.length > 1 ? 's' : ''}?\n\n` +
-      `Total: ${formatCurrency(totalAmount)}\n` +
+      `Total a Pagar: ${formatCurrency(totalAmount)}\n` +
       `Eventos a liquidar: ${totalEvents}\n\n` +
       `Esta ação marca todas as ordens selecionadas como pagas e liquida os eventos vinculados. É irreversível.`
     )) return
@@ -401,13 +404,15 @@ export default function OrdensListClient({ orders: initialOrders, producers, cna
                     <td className="pl-4 pr-2 py-2.5" />
                     <td colSpan={3} className="px-4 py-2.5 text-xs font-semibold text-gray-500">
                       {selectedOrders.length > 0
-                        ? `${selectedOrders.length} selecionada${selectedOrders.length > 1 ? 's' : ''} · Total seleção:`
+                        ? `${selectedOrders.length} selecionada${selectedOrders.length > 1 ? 's' : ''} · Total a Pagar:`
                         : 'Total pendente'}
                     </td>
                     <td className="px-4 py-2.5 text-center" />
                     <td className="px-4 py-2.5 text-right font-bold text-green-700">
                       {selectedOrders.length > 0
-                        ? formatCurrency(selectedOrders.reduce((s, o) => s + Number(o.amount), 0))
+                        ? formatCurrency(allSelected && netPeriodTotal !== undefined
+                            ? netPeriodTotal
+                            : selectedOrders.reduce((s, o) => s + Number(o.amount), 0))
                         : formatCurrency(filtered.reduce((s, o) => s + Number(o.amount), 0))
                       }
                     </td>

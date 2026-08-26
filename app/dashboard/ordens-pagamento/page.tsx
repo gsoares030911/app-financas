@@ -21,6 +21,36 @@ export default async function OrdensPagamentoPage() {
     getCnabConfig(),
   ])
 
+  const pendingOps = (orders ?? []).filter(o => o.status === 'pending')
+  const pendingTotal = pendingOps.reduce((s, o) => s + Number(o.amount), 0)
+
+  // Offset de negativos: apenas produtores SEM OP pendente que têm saldo negativo
+  // NO PERÍODO atual (period_from/period_to das OPs). Evita carregar dívidas de períodos anteriores.
+  const periodFrom = pendingOps.map(o => o.period_from).filter(Boolean).sort()[0] ?? null
+  const periodTo   = pendingOps.map(o => o.period_to).filter(Boolean).sort().reverse()[0] ?? null
+
+  let negativeOffset = 0
+  if (periodFrom && periodTo) {
+    const opProducerIds = new Set(pendingOps.map(o => o.producer_id))
+    const { data: periodEntries } = await supabase
+      .from('account_entries')
+      .select('producer_id, entry_type, amount')
+      .gte('date', periodFrom)
+      .lte('date', periodTo)
+
+    const nets = new Map<string, number>()
+    for (const e of (periodEntries ?? [])) {
+      if (opProducerIds.has(e.producer_id)) continue
+      const delta = e.entry_type === 'credito' ? Number(e.amount) : -Number(e.amount)
+      nets.set(e.producer_id, (nets.get(e.producer_id) ?? 0) + delta)
+    }
+    for (const net of nets.values()) {
+      if (net < 0) negativeOffset += net
+    }
+  }
+
+  const netPeriodTotal = pendingTotal + negativeOffset
+
   return (
     <div className="space-y-6">
       <div>
@@ -33,6 +63,7 @@ export default async function OrdensPagamentoPage() {
         orders={(orders ?? []) as PaymentOrder[]}
         producers={(producers ?? []) as Pick<Producer, 'id' | 'full_name' | 'cpf_cnpj' | 'bank_name' | 'bank_agency' | 'bank_account' | 'pix_key'>[]}
         cnabConfig={cnabConfig}
+        netPeriodTotal={netPeriodTotal}
       />
     </div>
   )

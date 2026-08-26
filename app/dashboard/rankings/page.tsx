@@ -54,7 +54,7 @@ export default async function RankingsPage() {
     canAccessProdutores(profile.role)
       ? supabase.from('producers').select('id, full_name', { count: 'exact' }).order('full_name').limit(1000)
       : Promise.resolve({ data: [], count: 0 }),
-    supabase.from('events').select('id, name, event_date, producer_id').eq('status', 'cancelado'),
+    supabase.from('events').select('id, name, event_date, producer_id').eq('status', 'cancelado').is('recovery_applied_at', null),
     canSeeOrders
       ? supabase.from('payment_orders').select('*').eq('status', 'pending').order('created_at')
       : Promise.resolve({ data: [] }),

@@ -12,6 +12,7 @@ interface Props {
   producer: Producer
   events: ProducerEvent[]
   entries: AccountEntry[]
+  periodDeductions?: AccountEntry[]
 }
 
 function fmtDate(d: string) {
@@ -20,10 +21,11 @@ function fmtDate(d: string) {
   })
 }
 
-export default function OrdemPagamento({ order, producer, events, entries }: Props) {
+export default function OrdemPagamento({ order, producer, events, entries, periodDeductions = [] }: Props) {
   const totalCredits = entries.filter(e => e.entry_type === 'credito').reduce((s, e) => s + Number(e.amount), 0)
   const totalDebits  = entries.filter(e => e.entry_type === 'debito').reduce((s, e) => s + Number(e.amount), 0)
-  const totalAPagar  = Number(order.amount)
+  const totalDeductions = periodDeductions.reduce((s, e) => s + Number(e.amount), 0)
+  const totalAPagar  = Math.round(Number(order.amount) * 100) / 100
 
   const debitsByEvent = entries.reduce<Record<string, number>>((acc, e) => {
     if (e.entry_type === 'debito' && e.event_id) {
@@ -217,6 +219,45 @@ export default function OrdemPagamento({ order, producer, events, entries }: Pro
                   <tr>
                     <td colSpan={3} className="px-4 py-2">Total débitos</td>
                     <td className="px-4 py-2 text-right font-semibold text-red-600">−{formatCurrency(totalDebits)}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* Descontos de período (cancelamentos, empréstimos, etc. que reduziram o repasse) */}
+        {periodDeductions.length > 0 && (
+          <div className="mb-6">
+            <h2 className="text-xs font-semibold text-red-500 uppercase tracking-wide mb-3">
+              Descontos do Período
+            </h2>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm border border-red-100 rounded-lg overflow-hidden min-w-[560px]">
+                <thead>
+                  <tr className="bg-red-50 border-b border-red-100">
+                    <th className="px-4 py-2.5 text-left font-semibold text-gray-600">Data</th>
+                    <th className="px-4 py-2.5 text-left font-semibold text-gray-600">Descrição</th>
+                    <th className="px-4 py-2.5 text-left font-semibold text-gray-600">Categoria</th>
+                    <th className="px-4 py-2.5 text-right font-semibold text-gray-600">Desconto</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-red-50">
+                  {periodDeductions.map(e => (
+                    <tr key={e.id}>
+                      <td className="px-4 py-2.5 text-gray-500 whitespace-nowrap">{fmtDate(e.date)}</td>
+                      <td className="px-4 py-2.5 text-gray-800">{e.description}</td>
+                      <td className="px-4 py-2.5 text-gray-500">{CATEGORY_LABELS[e.category] ?? e.category}</td>
+                      <td className="px-4 py-2.5 text-right font-semibold text-red-600 whitespace-nowrap">
+                        − {formatCurrency(Number(e.amount))}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot className="border-t border-red-100 bg-red-50">
+                  <tr>
+                    <td colSpan={3} className="px-4 py-2 text-xs text-gray-500">Total de descontos</td>
+                    <td className="px-4 py-2 text-right font-semibold text-red-600">− {formatCurrency(totalDeductions)}</td>
                   </tr>
                 </tfoot>
               </table>

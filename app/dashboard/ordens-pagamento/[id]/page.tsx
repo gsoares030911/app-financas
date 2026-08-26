@@ -65,6 +65,24 @@ export default async function OrdemPagamentoDetailPage({
     generalEntries = (data ?? []) as AccountEntry[]
   }
 
+  // Descontos de período: lançamentos de eventos cancelados (com event_id mas fora da OP)
+  // que reduziram o saldo do produtor neste período — precisam aparecer na OP para transparência.
+  let periodDeductions: AccountEntry[] = []
+  if ((o.period_from || o.period_to) && o.event_ids.length > 0) {
+    let q = supabase
+      .from('account_entries')
+      .select('*')
+      .eq('producer_id', o.producer_id)
+      .eq('entry_type', 'debito')
+      .not('event_id', 'is', null)
+      .not('event_id', 'in', `(${o.event_ids.join(',')})`)
+      .order('date', { ascending: true })
+    if (o.period_from) q = q.gte('date', o.period_from)
+    if (o.period_to)   q = q.lte('date', o.period_to)
+    const { data } = await q
+    periodDeductions = (data ?? []) as AccountEntry[]
+  }
+
   const allEntries = [
     ...((eventEntries ?? []) as AccountEntry[]),
     ...generalEntries,
@@ -76,6 +94,7 @@ export default async function OrdemPagamentoDetailPage({
       producer={producer as Producer}
       events={(events ?? []) as ProducerEvent[]}
       entries={allEntries}
+      periodDeductions={periodDeductions}
     />
   )
 }
