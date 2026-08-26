@@ -63,6 +63,24 @@ export async function updateUserRole(targetUserId: string, newRole: UserRole) {
   return { success: true }
 }
 
+export async function updateProducerLink(targetUserId: string, producerId: string | null) {
+  const supabase = await createClient()
+  const { data: { user: caller } } = await supabase.auth.getUser()
+  if (!caller) return { error: 'Não autenticado' }
+
+  const profile = await getOrCreateProfile(caller.id, caller.email ?? undefined)
+  if (!isAdmin(profile.role)) return { error: 'Apenas administradores podem vincular produtores' }
+
+  const admin = createAdminClient()
+  const { error } = await admin
+    .from('profiles')
+    .update({ producer_id: producerId || null })
+    .eq('id', targetUserId)
+
+  if (error) return { error: error.message }
+  return { success: true }
+}
+
 export async function deleteUser(targetUserId: string) {
   const supabase = await createClient()
   const { data: { user: caller } } = await supabase.auth.getUser()

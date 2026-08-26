@@ -36,7 +36,9 @@ interface Props {
   page: number
   totalPages: number
   totalCount: number
+  globalTotalCount: number
   searchQuery: string
+  activeFilter: BalanceFilter
   globalTotalToReceive: number
   globalTotalOwed: number
   globalCountToReceive: number
@@ -51,7 +53,7 @@ type PeriodEntry = Pick<AccountEntry, 'producer_id' | 'event_id' | 'entry_type' 
 
 export default function ProducersClient({
   producers, entries, paidOrders, emittedEventIds, userId,
-  page, totalPages, totalCount, searchQuery,
+  page, totalPages, totalCount, globalTotalCount, searchQuery, activeFilter,
   globalTotalToReceive, globalTotalOwed,
   globalCountToReceive, globalCountOwed, globalCountZero,
 }: Props) {
@@ -59,7 +61,7 @@ export default function ProducersClient({
   const supabase = createClient()
 
   const [search, setSearch] = useState(searchQuery)
-  const [balanceFilter, setBalanceFilter] = useState<BalanceFilter>('todos')
+  const balanceFilter = activeFilter
   const [formOpen, setFormOpen] = useState(false)
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined)
   const [excluded, setExcluded] = useState<Set<string>>(new Set())
@@ -72,10 +74,21 @@ export default function ProducersClient({
   const [periodProducers, setPeriodProducers] = useState<Producer[]>([])
   const [periodEvents, setPeriodEvents] = useState<PeriodEvent[]>([])
   const [periodEntries, setPeriodEntries] = useState<PeriodEntry[]>([])
+  const [periodCancelledEntries, setPeriodCancelledEntries] = useState<PeriodEntry[]>([])
   const [periodEmittedIds, setPeriodEmittedIds] = useState<string[]>([])
 
   const periodActive = !!dateRange?.from
-  const emittedSet = useMemo(() => new Set(emittedEventIds), [emittedEventIds])
+
+  function buildParams(overrides: { q?: string; page?: number; filter?: BalanceFilter }) {
+    const p = new URLSearchParams()
+    const q = overrides.q !== undefined ? overrides.q : search
+    const pg = overrides.page ?? 1
+    const f = overrides.filter !== undefined ? overrides.filter : activeFilter
+    if (q) p.set('q', q)
+    if (f !== 'todos') p.set('filter', f)
+    p.set('page', String(pg))
+    return p.toString()
+  }
 
   // Debounce search → URL (skip initial mount)
   const searchInitialized = useRef(false)
@@ -83,10 +96,7 @@ export default function ProducersClient({
     if (!searchInitialized.current) { searchInitialized.current = true; return }
     if (periodActive) return
     const t = setTimeout(() => {
-      const p = new URLSearchParams()
-      if (search) p.set('q', search)
-      p.set('page', '1')
-      router.push(`/dashboard/producers?${p.toString()}`)
+      router.push(`/dashboard/producers?${buildParams({ q: search, page: 1 })}`)
     }, 400)
     return () => clearTimeout(t)
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -103,23 +113,16 @@ export default function ProducersClient({
     })
   }, [producers, entries, paidOrders])
 
+  // Server already filtered by balance; client only needs to apply the search box
   const filteredBalance = useMemo(() => {
     const q = search.toLowerCase()
-    return producersWithBalance.filter(({ producer, balance }) => {
-      const matchSearch = !q ||
-        producer.full_name.toLowerCase().includes(q) ||
-        producer.email?.toLowerCase().includes(q) ||
-        producer.phone?.includes(q)
-      if (!matchSearch) return false
-      if (balanceFilter === 'a_pagar') return balance > 0
-      if (balanceFilter === 'devendo') return balance < 0
-      if (balanceFilter === 'zerado') return balance === 0
-      return true
-    })
-  }, [producersWithBalance, search, balanceFilter])
-
-  const totalToReceive = producersWithBalance.filter(p => p.balance > 0).reduce((s, p) => s + p.balance, 0)
-  const totalOwed      = producersWithBalance.filter(p => p.balance < 0).reduce((s, p) => s + Math.abs(p.balance), 0)
+    if (!q) return producersWithBalance
+    return producersWithBalance.filter(({ producer }) =>
+      producer.full_name.toLowerCase().includes(q) ||
+      producer.email?.toLowerCase().includes(q) ||
+      producer.phone?.includes(q)
+    )
+  }, [producersWithBalance, search])
 
   function ymd(d: Date): string {
     return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
@@ -163,7 +166,9 @@ export default function ProducersClient({
 
       const eventIds = evs.map(e => e.id)
 
-      const [prodsRes, entriesRes, ordersRes] = await Promise.all([
+      // Busca cancelados por billing_from (quando existe) e por event_date (quando billing_from é null)
+      // para cobrir tanto eventos criados com quanto sem billing_from
+      const [prodsRes, entriesRes, ordersRes, cancelledQ1, cancelledQ2] = await Promise.all([
         supabase.from('producers').select('*').in('id', producerIdArr),
         supabase.from('account_entries')
           .select('producer_id, event_id, entry_type, amount')
@@ -171,15 +176,50 @@ export default function ProducersClient({
         supabase.from('payment_orders')
           .select('event_ids')
           .in('producer_id', producerIdArr),
+        supabase.from('events')
+          .select('id, producer_id')
+          .eq('status', 'cancelado')
+          .not('billing_from', 'is', null)
+          .gte('billing_from', fromStr)
+          .lte('billing_from', toStr),
+        supabase.from('events')
+          .select('id, producer_id')
+          .eq('status', 'cancelado')
+          .is('billing_from', null)
+          .gte('event_date', fromStr)
+          .lte('event_date', toStr),
       ])
+
+      const cancelledEvData = [...(cancelledQ1.data ?? []), ...(cancelledQ2.data ?? [])] as { id: string; producer_id: string }[]
+      const cancelledEventIds = cancelledEvData.map(e => e.id)
+      const cancelledProducerIds = [...new Set(cancelledEvData.map(e => e.producer_id))]
+
+      let cancelledEntries: PeriodEntry[] = []
+      if (cancelledEventIds.length > 0) {
+        const cancelledEntriesRes = await supabase.from('account_entries')
+          .select('producer_id, event_id, entry_type, amount')
+          .in('event_id', cancelledEventIds)
+        cancelledEntries = (cancelledEntriesRes.data ?? []) as PeriodEntry[]
+      }
+
+      // Produtores com apenas eventos cancelados no período (sem pending) —
+      // precisam entrar no total para que o saldo negativo reduza o A Pagar
+      const cancelledOnlyIds = cancelledProducerIds.filter(id => !producerIdArr.includes(id))
+      let cancelledOnlyProducers: Producer[] = []
+      if (cancelledOnlyIds.length > 0) {
+        const { data: coProds } = await supabase.from('producers').select('*')
+          .in('id', cancelledOnlyIds).eq('user_id', userId)
+        cancelledOnlyProducers = (coProds ?? []) as Producer[]
+      }
 
       const orders = ordersRes.data ?? []
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const allEmitted = [...new Set(orders.flatMap((o: any) => o.event_ids ?? []))] as string[]
 
-      setPeriodProducers((prodsRes.data ?? []) as Producer[])
+      setPeriodProducers([...(prodsRes.data ?? []) as Producer[], ...cancelledOnlyProducers])
       setPeriodEvents(evs)
       setPeriodEntries((entriesRes.data ?? []) as PeriodEntry[])
+      setPeriodCancelledEntries(cancelledEntries)
       setPeriodEmittedIds(allEmitted)
     } finally {
       setPeriodLoading(false)
@@ -203,20 +243,31 @@ export default function ProducersClient({
             return dateKey >= fromStr && dateKey <= toStr
           })
           .map(ev => ev.id)
-        if (eventIds.length === 0) return { producer, eventIds, payable: 0 }
+
         const ids = new Set(eventIds)
         const rel = periodEntries.filter(e => e.event_id && ids.has(e.event_id))
         const credits = rel.filter(e => e.entry_type === 'credito').reduce((s, e) => s + e.amount, 0)
         const debits  = rel.filter(e => e.entry_type === 'debito').reduce((s, e) => s + e.amount, 0)
-        return { producer, eventIds, payable: Math.max(credits - debits, 0) }
-      })
-      .filter(p => p.payable > 0)
-  }, [periodActive, periodLoading, dateRange, periodProducers, periodEvents, periodEntries, periodEmittedIds])
 
+        // Débitos líquidos de eventos cancelados no período (empréstimos, anúncios etc.)
+        const cancelledRel = periodCancelledEntries.filter(e => e.producer_id === producer.id)
+        const cancelledDebits  = cancelledRel.filter(e => e.entry_type === 'debito').reduce((s, e) => s + e.amount, 0)
+        const cancelledCredits = cancelledRel.filter(e => e.entry_type === 'credito').reduce((s, e) => s + e.amount, 0)
+        const cancelledNet = Math.max(cancelledDebits - cancelledCredits, 0)
+
+        // Permite payable negativo — produtor com saldo devedor fica na C/C
+        // mas é excluído da emissão de OP (filtro abaixo em filteredPeriod)
+        return { producer, eventIds, payable: credits - debits - cancelledNet }
+      })
+      .filter(p => p.payable !== 0 || p.eventIds.length > 0)
+  }, [periodActive, periodLoading, dateRange, periodProducers, periodEvents, periodEntries, periodCancelledEntries, periodEmittedIds])
+
+  // Lista para emissão de OP: apenas produtores com saldo positivo
   const filteredPeriod = useMemo(() => {
-    if (!search.trim()) return periodPayables
+    const positive = periodPayables.filter(p => p.payable > 0)
+    if (!search.trim()) return positive
     const q = search.toLowerCase()
-    return periodPayables.filter(({ producer }) =>
+    return positive.filter(({ producer }) =>
       producer.full_name.toLowerCase().includes(q) ||
       producer.email?.toLowerCase().includes(q) ||
       producer.phone?.includes(q)
@@ -264,13 +315,15 @@ export default function ProducersClient({
         .map(r => {
           const empresa = r['nomedaempresa'] || ''
           const obs     = r['observacoes'] || ''
-          const notes   = [empresa && `Empresa: ${empresa}`, obs].filter(Boolean).join(' | ') || null
-          // CPF/CNPJ: prefere CNPJ (14 dígitos) se disponível, senão CPF
-          const cnpjRaw = (r['cnpj'] || '').replace(/\D/g, '')
-          const cpfRaw  = (r['cpf']  || '').replace(/\D/g, '')
+          const notes   = [obs].filter(Boolean).join(' | ') || null
+          // CPF/CNPJ: aceita coluna "CNPJ"/"CPF" separadas ou "CPF/CNPJ" combinada
+          const combined = (r['cpf/cnpj'] || r['cpfcnpj'] || '').replace(/\D/g, '')
+          const cnpjRaw  = (r['cnpj'] || '').replace(/\D/g, '') || (combined.length === 14 ? combined : '')
+          const cpfRaw   = (r['cpf']  || '').replace(/\D/g, '') || (combined.length === 11 ? combined : '')
           const cpf_cnpj = cnpjRaw.length === 14 ? cnpjRaw : (cpfRaw.length === 11 ? cpfRaw : null)
           return {
             name:         r['nome'] || '',
+            company:      empresa,
             email:        r['email'] || null,
             phone:        r['telefone'] || null,
             cpf_cnpj,
@@ -281,10 +334,10 @@ export default function ProducersClient({
             notes,
           }
         })
-        .filter(r => r.name)
+        .filter(r => r.name || r.company)
 
       if (parsed.length === 0) {
-        toast.error('Nenhum produtor encontrado. Verifique se a coluna "Nome" existe.')
+        toast.error('Nenhum produtor encontrado. Verifique se a coluna "Nome" ou "Nome da Empresa" existe.')
         return
       }
 
@@ -307,8 +360,14 @@ export default function ProducersClient({
       const existingMap = new Map(allExisting.map(p => [p.full_name.toLowerCase().trim(), p.id]))
       const norm = (s: string) => s.toLowerCase().trim()
 
-      const toInsert = parsed.filter(p => !existingMap.has(norm(p.name)))
-      const toUpdate = parsed.filter(p =>  existingMap.has(norm(p.name)))
+      // Tenta match por nome de empresa primeiro (DB tem nomes de empresa), depois por nome pessoal
+      const resolveId = (p: { name: string; company: string }) =>
+        (p.company && existingMap.get(norm(p.company))) ||
+        (p.name    && existingMap.get(norm(p.name)))    ||
+        undefined
+
+      const toInsert = parsed.filter(p => !resolveId(p))
+      const toUpdate = parsed.filter(p => !!resolveId(p))
 
       const msgParts = []
       if (toInsert.length > 0) msgParts.push(`${toInsert.length} novo(s)`)
@@ -321,7 +380,7 @@ export default function ProducersClient({
         const { error } = await supabase.from('producers').insert(
           toInsert.map(p => ({
             user_id: userId,
-            full_name: p.name,
+            full_name: p.company || p.name,
             email: p.email,
             phone: p.phone,
             cpf_cnpj: p.cpf_cnpj,
@@ -341,7 +400,7 @@ export default function ProducersClient({
       for (let i = 0; i < toUpdate.length; i += BATCH) {
         const chunk = toUpdate.slice(i, i + BATCH)
         await Promise.all(chunk.map(async p => {
-          const id = existingMap.get(norm(p.name))!
+          const id = resolveId(p)!
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const patch: Record<string, any> = {}
           if (p.email)        patch.email        = p.email
@@ -413,10 +472,11 @@ export default function ProducersClient({
   }
 
   function goPage(p: number) {
-    const params = new URLSearchParams()
-    if (search) params.set('q', search)
-    params.set('page', String(p))
-    router.push(`/dashboard/producers?${params.toString()}`)
+    router.push(`/dashboard/producers?${buildParams({ page: p })}`)
+  }
+
+  function applyFilter(f: BalanceFilter) {
+    router.push(`/dashboard/producers?${buildParams({ filter: f, page: 1 })}`)
   }
 
   return (
@@ -574,7 +634,7 @@ export default function ProducersClient({
         <div className="flex flex-wrap gap-2 text-sm">
           {(
             [
-              { key: 'todos',    label: `Todos (${totalCount})` },
+              { key: 'todos',    label: `Todos (${globalTotalCount})` },
               { key: 'a_pagar', label: `A pagar (${globalCountToReceive})`,  activeClass: 'bg-green-600 text-white border-green-600',  inactiveClass: 'text-green-700 border-green-300 hover:bg-green-50' },
               { key: 'devendo',  label: `Devendo (${globalCountOwed})`, activeClass: 'bg-red-600 text-white border-red-600',      inactiveClass: 'text-red-700 border-red-300 hover:bg-red-50' },
               { key: 'zerado',   label: `Zerado (${globalCountZero})`,activeClass: 'bg-gray-500 text-white border-gray-500',    inactiveClass: 'text-gray-600 border-gray-300 hover:bg-gray-50' },
@@ -582,7 +642,7 @@ export default function ProducersClient({
           ).map(chip => {
             const isActive = balanceFilter === chip.key
             return (
-              <button key={chip.key} onClick={() => setBalanceFilter(chip.key)}
+              <button key={chip.key} onClick={() => applyFilter(chip.key)}
                 className={`px-3 py-1 rounded-full border font-medium transition-colors ${isActive ? (chip.activeClass ?? 'bg-blue-600 text-white border-blue-600') : (chip.inactiveClass ?? 'text-blue-700 border-blue-300 hover:bg-blue-50')}`}
               >
                 {chip.label}
@@ -677,7 +737,7 @@ export default function ProducersClient({
                 <p className="text-sm text-gray-400">Clique em "Novo Produtor" para começar</p>
               </div>
             ) : (
-              <p className="text-gray-400">Nenhum resultado para &quot;{search}&quot;</p>
+              <p className="text-gray-400">Nenhum resultado encontrado</p>
             )}
           </div>
         ) : (
@@ -696,7 +756,9 @@ export default function ProducersClient({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {filteredBalance.map(({ producer, balance }) => (
+                  {filteredBalance.map(({ producer, balance }) => {
+                    const displayBalance = Math.round(balance * 100) / 100
+                    return (
                     <tr key={producer.id} className="hover:bg-gray-50 transition-colors cursor-pointer">
                       <td className="px-4 py-3 font-medium text-gray-900">
                         <Link href={`/dashboard/producers/${producer.id}`} className="hover:underline hover:text-blue-700 block">
@@ -708,13 +770,13 @@ export default function ProducersClient({
                       <td className="px-4 py-3 text-gray-500 font-mono text-xs">{producer.pix_key ?? '—'}</td>
                       <td className="px-4 py-3 text-center">
                         <span className={`text-xs font-semibold px-2 py-0.5 rounded-full whitespace-nowrap ${
-                          balance >= 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                          displayBalance >= 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
                         }`}>
-                          {balance >= 0 ? 'A pagar' : 'Devendo'}
+                          {displayBalance >= 0 ? 'A pagar' : 'Devendo'}
                         </span>
                       </td>
-                      <td className={`px-4 py-3 text-right font-bold ${balance >= 0 ? 'text-green-700' : 'text-red-600'}`}>
-                        {formatCurrency(Math.abs(balance))}
+                      <td className={`px-4 py-3 text-right font-bold ${displayBalance >= 0 ? 'text-green-700' : 'text-red-600'}`}>
+                        {formatCurrency(Math.abs(displayBalance))}
                       </td>
                       <td className="px-4 py-3">
                         <Link href={`/dashboard/producers/${producer.id}`}>
@@ -722,12 +784,11 @@ export default function ProducersClient({
                         </Link>
                       </td>
                     </tr>
-                  ))}
+                  )})}
                 </tbody>
               </table>
             </div>
 
-            {/* Controles de paginação */}
             {totalPages > 1 && (
               <div className="flex items-center justify-between px-1">
                 <span className="text-sm text-gray-500">

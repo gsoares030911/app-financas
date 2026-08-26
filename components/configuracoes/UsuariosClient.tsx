@@ -7,7 +7,7 @@ import { ShieldCheck, Shield, User, Loader2, Plus, X, Trash2, Eye, EyeOff } from
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { SUPER_ADMIN_EMAIL, ROLE_CONFIG, canManageUsers } from '@/lib/utils/auth'
-import { createUser, updateUserRole, deleteUser } from '@/app/dashboard/configuracoes/usuarios/actions'
+import { createUser, updateUserRole, deleteUser, updateProducerLink } from '@/app/dashboard/configuracoes/usuarios/actions'
 import type { Profile, UserRole } from '@/lib/types'
 
 const ROLE_ICONS: Record<UserRole, React.ElementType> = {
@@ -29,13 +29,14 @@ interface Props {
   profiles: Profile[]
   currentUserId: string
   currentRole: UserRole
+  producers?: { id: string; full_name: string }[]
 }
 
 function fmtDate(d: string) {
   return new Date(d).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
 }
 
-export default function UsuariosClient({ profiles: initial, currentUserId, currentRole }: Props) {
+export default function UsuariosClient({ profiles: initial, currentUserId, currentRole, producers = [] }: Props) {
   const router = useRouter()
   const [profiles, setProfiles] = useState<Profile[]>(initial)
   const [loading, setLoading] = useState<string | null>(null)
@@ -77,6 +78,15 @@ export default function UsuariosClient({ profiles: initial, currentUserId, curre
     if (result.error) { toast.error(result.error); return }
     setProfiles(prev => prev.map(p => p.id === profile.id ? { ...p, role: newRole } : p))
     toast.success('Perfil atualizado')
+  }
+
+  async function handleLinkProducer(profile: Profile, producerId: string) {
+    setLoading(profile.id + '_link')
+    const result = await updateProducerLink(profile.id, producerId || null)
+    setLoading(null)
+    if (result.error) { toast.error(result.error); return }
+    setProfiles(prev => prev.map(p => p.id === profile.id ? { ...p, producer_id: producerId || null } : p))
+    toast.success('Produtor vinculado')
   }
 
   async function handleDelete(profile: Profile) {
@@ -218,23 +228,38 @@ export default function UsuariosClient({ profiles: initial, currentUserId, curre
                     </td>
 
                     <td className="px-4 py-3">
-                      {canManage && !isProtected ? (
-                        <select
-                          value={profile.role}
-                          disabled={isLoadingThis}
-                          onChange={e => handleChangeRole(profile, e.target.value as UserRole)}
-                          className={`text-xs font-semibold px-2 py-1 rounded-full border-0 cursor-pointer ${cfg.bg} ${cfg.color}`}
-                        >
-                          {ASSIGNABLE_ROLES.map(r => (
-                            <option key={r} value={r}>{ROLE_CONFIG[r].label}</option>
-                          ))}
-                        </select>
-                      ) : (
-                        <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full ${cfg.bg} ${cfg.color}`}>
-                          <Icon className="h-3 w-3" />
-                          {cfg.label}
-                        </span>
-                      )}
+                      <div className="flex flex-col gap-1.5">
+                        {canManage && !isProtected ? (
+                          <select
+                            value={profile.role}
+                            disabled={isLoadingThis}
+                            onChange={e => handleChangeRole(profile, e.target.value as UserRole)}
+                            className={`text-xs font-semibold px-2 py-1 rounded-full border-0 cursor-pointer ${cfg.bg} ${cfg.color}`}
+                          >
+                            {ASSIGNABLE_ROLES.map(r => (
+                              <option key={r} value={r}>{ROLE_CONFIG[r].label}</option>
+                            ))}
+                          </select>
+                        ) : (
+                          <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full ${cfg.bg} ${cfg.color}`}>
+                            <Icon className="h-3 w-3" />
+                            {cfg.label}
+                          </span>
+                        )}
+                        {profile.role === 'producer' && canManage && producers.length > 0 && (
+                          <select
+                            value={profile.producer_id ?? ''}
+                            disabled={loading === profile.id + '_link'}
+                            onChange={e => handleLinkProducer(profile, e.target.value)}
+                            className="text-xs px-2 py-1 rounded border border-gray-200 bg-white text-gray-600 cursor-pointer max-w-[200px] truncate"
+                          >
+                            <option value="">— Vincular produtor —</option>
+                            {producers.map(p => (
+                              <option key={p.id} value={p.id}>{p.full_name}</option>
+                            ))}
+                          </select>
+                        )}
+                      </div>
                     </td>
 
                     <td className="px-4 py-3 text-gray-500 text-xs whitespace-nowrap">

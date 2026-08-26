@@ -18,10 +18,10 @@ export default async function UsuariosPage() {
   // A política RLS de profiles só permite ver o próprio registro, então
   // sem isso a lista mostraria apenas o usuário atual.
   const admin = createAdminClient()
-  const { data: profiles } = await admin
-    .from('profiles')
-    .select('*')
-    .order('created_at', { ascending: true })
+  const [{ data: profiles }, { data: producers }] = await Promise.all([
+    admin.from('profiles').select('*').order('created_at', { ascending: true }),
+    admin.from('producers').select('id, full_name').order('full_name'),
+  ])
 
   return (
     <div className="space-y-6">
@@ -33,6 +33,7 @@ export default async function UsuariosPage() {
         profiles={(profiles ?? []) as Profile[]}
         currentUserId={user.id}
         currentRole={profile.role}
+        producers={(producers ?? []) as { id: string; full_name: string }[]}
       />
     </div>
   )
