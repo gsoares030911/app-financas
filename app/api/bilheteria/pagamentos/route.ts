@@ -43,11 +43,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: `API retornou ${res.status}: ${text}` }, { status: res.status })
     }
 
-    // Decodifica com windows-1252 (encoding legado do endpoint) para preservar
-    // caracteres especiais como aspas tipográficas, acentos etc.
-    const buf  = await res.arrayBuffer()
-    const text = new TextDecoder('windows-1252').decode(buf)
-    const data = JSON.parse(text)
+    const data = await res.json()
 
     // Salva histórico no banco (não bloqueia a resposta em caso de erro)
     const admin = createAdminClient()

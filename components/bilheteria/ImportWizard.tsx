@@ -79,6 +79,9 @@ interface CancelledGroup {
   loanInterest: number
   voucher: number
   otherExpenses: number
+  feeAdmin: number
+  feeServiceFixed: number
+  locacao: number
   pix: string
   phone: string
   email: string
@@ -143,6 +146,16 @@ function findMatchByEmail(email: string, producers: Producer[]): Producer | null
   return producers.find(p => p.email?.toLowerCase().trim() === e) ?? null
 }
 
+function findMatchByPix(pix: string, producers: Producer[]): Producer | null {
+  if (!pix) return null
+  const p = pix.toLowerCase().replace(/\D/g, '') || pix.toLowerCase().trim()
+  return producers.find(pr => {
+    if (!pr.pix_key) return false
+    const k = pr.pix_key.toLowerCase().replace(/\D/g, '') || pr.pix_key.toLowerCase().trim()
+    return k === p
+  }) ?? null
+}
+
 function isHillarius(name: string): boolean {
   return name.toLowerCase().includes('hillarius')
 }
@@ -169,25 +182,44 @@ function parseAPIResponse(entries: BilheteriaEntry[]): {
 
     if (entry.flagCancelado === 'S') {
       cancelled++
-      const adv  = entry.valorAnuncio    ?? 0
-      const loan = entry.valorEmprestimo ?? 0
-      const lInt = entry.jurosEmprestimo ?? 0
-      const oth  = entry.valorOutros     ?? 0
+      const adv      = entry.valorAnuncio    ?? 0
+      const loan     = entry.valorEmprestimo ?? 0
+      const lInt     = entry.jurosEmprestimo ?? 0
+      const oth      = entry.valorOutros     ?? 0
+      const feeAdm   = entry.taxaSistema     ?? 0
+      const feeFixed = entry.taxaServicoFixa ?? 0
+      const locacao  = entry.valorLocacao    ?? 0
 
-      if (adv > 0 || loan > 0 || lInt > 0 || oth > 0) {
+      if (adv > 0 || loan > 0 || lInt > 0 || oth > 0 || feeAdm > 0 || feeFixed > 0 || locacao > 0) {
         const cKey = `${dateStr}|${show}|${producer}`
-        const ex = cancelledMap.get(cKey)
-        if (ex) {
-          ex.advertising   = r2(ex.advertising   + adv)
-          ex.loan          = r2(ex.loan          + loan)
-          ex.loanInterest  = r2(ex.loanInterest  + lInt)
-          ex.otherExpenses = r2(ex.otherExpenses + oth)
+        // Se existe evento pendente com o mesmo key, acumula os débitos nele —
+        // assim o Step 3 os cria junto com os demais débitos do evento pendente.
+        const pendingGroup = map.get(cKey)
+        if (pendingGroup) {
+          pendingGroup.advertising   = r2(pendingGroup.advertising   + adv)
+          pendingGroup.loan          = r2(pendingGroup.loan          + loan)
+          pendingGroup.loanInterest  = r2(pendingGroup.loanInterest  + lInt)
+          pendingGroup.otherExpenses = r2(pendingGroup.otherExpenses + oth)
+          pendingGroup.feeAdmin      = r2(pendingGroup.feeAdmin      + feeAdm)
+          pendingGroup.feeService    = r2(pendingGroup.feeService    + feeFixed + locacao)
         } else {
-          cancelledMap.set(cKey, {
-            key: cKey, dateStr, show, producerName: producer,
-            advertising: adv, loan, loanInterest: lInt, voucher: 0, otherExpenses: oth,
-            pix: entry.pix ?? '', phone: entry.celular ?? '', email: entry.email ?? '',
-          })
+          const ex = cancelledMap.get(cKey)
+          if (ex) {
+            ex.advertising      = r2(ex.advertising      + adv)
+            ex.loan             = r2(ex.loan             + loan)
+            ex.loanInterest     = r2(ex.loanInterest     + lInt)
+            ex.otherExpenses    = r2(ex.otherExpenses    + oth)
+            ex.feeAdmin         = r2(ex.feeAdmin         + feeAdm)
+            ex.feeServiceFixed  = r2(ex.feeServiceFixed  + feeFixed)
+            ex.locacao          = r2(ex.locacao          + locacao)
+          } else {
+            cancelledMap.set(cKey, {
+              key: cKey, dateStr, show, producerName: producer,
+              advertising: adv, loan, loanInterest: lInt, voucher: 0, otherExpenses: oth,
+              feeAdmin: feeAdm, feeServiceFixed: feeFixed, locacao,
+              pix: entry.pix ?? '', phone: entry.celular ?? '', email: entry.email ?? '',
+            })
+          }
         }
       }
       continue
@@ -205,19 +237,19 @@ function parseAPIResponse(entries: BilheteriaEntry[]): {
     const totalSales     = r2((entry.semTaxaCartao ?? 0) + (entry.semTaxaOutros ?? 0) + cashSales + voucherSales)
     // Base da BE (taxa de serviço e lucro BE) = só cartão/online + outros (sem dinheiro/voucher)
     const beBase         = r2((entry.semTaxaCartao ?? 0) + (entry.semTaxaOutros ?? 0))
-    const totalCardSales = entry.semTaxaCartao ?? 0
+    // Cartão + PIX/outros digitais: ambos pagam a mesma taxa de processamento
+    const totalCardSales = r2((entry.semTaxaCartao ?? 0) + (entry.semTaxaOutros ?? 0))
     const voucher       = 0
     const isTeatroPdv   = entry.tipo === 'TEATRO' || entry.tipo === 'PDV'
-    // taxaCartao/taxaDinheiro são TAXAS INTEIRAS (ex: 2 = 2%) — multiplica pelas vendas e divide por 100
-    const feeCardPix    = r2((entry.semTaxaCartao   ?? 0) * (entry.taxaCartao   ?? 0) / 100)
+    // taxaCartao é percentual inteiro (ex: 2 = 2%). Incide sobre cartão + PIX/outros (semTaxaOutros)
+    const feeCardPix    = r2(totalCardSales * (entry.taxaCartao ?? 0) / 100)
     // Taxa de dinheiro (≈2%) só nas vendas TEATRO/PDV — vira receita da BE e débito do produtor.
     // Voucher NÃO paga essa taxa (só a impressão/emissão, via feePrinting abaixo).
     const feeCash       = isTeatroPdv ? r2((entry.semTaxaDinheiro ?? 0) * (entry.taxaDinheiro ?? 0) / 100) : 0
     // taxaServicoPercentual é INTEGER % (ex: 7 = 7%) — divide por 100 para obter valor em R$.
-    // Incide só sobre a base BE (cartão+outros), não sobre dinheiro/voucher.
-    const hasActivity   = totalSales > 0 || (entry.qtdIngressos ?? 0) > 0
-    const feeServiceQ   = r2(beBase * (entry.taxaServicoPercentual ?? 0) / 100)
-    const feeService    = hasActivity ? r2(feeServiceQ + (entry.taxaServicoFixa ?? 0) + (entry.valorLocacao ?? 0)) : feeServiceQ
+    // Incide sobre totalSales (inclui dinheiro/voucher em eventos TEATRO/PDV), conforme fórmula do Excel.
+    const feeServiceQ   = r2(totalSales * (entry.taxaServicoPercentual ?? 0) / 100)
+    const feeService    = r2(feeServiceQ + (entry.taxaServicoFixa ?? 0) + (entry.valorLocacao ?? 0))
     const feeAdmin      = entry.taxaSistema         ?? 0
     // valorImpressaoUnitario é o valor POR ingresso — total = unitário × qtd.
     // Ingresso ONLINE é digital — sem taxa de impressão/emissão.
@@ -268,6 +300,21 @@ function parseAPIResponse(entries: BilheteriaEntry[]): {
         pix: entry.pix ?? '', phone: entry.celular ?? '', email: entry.email ?? '',
         selected: true,
       })
+    }
+  }
+
+  // Pós-processamento: entradas canceladas que chegaram antes das pendentes no array da API
+  // foram para cancelledMap antes de map ter a chave — mover seus débitos para o grupo pendente.
+  for (const [key, cg] of cancelledMap) {
+    const pg = map.get(key)
+    if (pg) {
+      pg.advertising   = r2(pg.advertising   + cg.advertising)
+      pg.loan          = r2(pg.loan          + cg.loan)
+      pg.loanInterest  = r2(pg.loanInterest  + cg.loanInterest)
+      pg.otherExpenses = r2(pg.otherExpenses + cg.otherExpenses)
+      pg.feeAdmin      = r2(pg.feeAdmin      + cg.feeAdmin)
+      pg.feeService    = r2(pg.feeService    + cg.feeServiceFixed + cg.locacao)
+      cancelledMap.delete(key)
     }
   }
 
@@ -354,9 +401,10 @@ export default function ImportWizard({ initialProducers }: Props) {
       const uniqueNames = [...new Set(groups.map(g => g.producerName))]
       const maps: ProducerMap[] = uniqueNames.map(name => {
         const g = groups.find(x => x.producerName === name)!
-        // Tenta por nome primeiro; se falhar, tenta por email
+        // Tenta por nome, depois email, depois chave PIX
         const match = findMatch(name, freshProducers)
           ?? findMatchByEmail(g.email, freshProducers)
+          ?? findMatchByPix(g.pix, freshProducers)
         return {
           nameInFile: name,
           pix:   g.pix,
@@ -404,6 +452,28 @@ export default function ImportWizard({ initialProducers }: Props) {
         }).select().single()
         if (error) result.errors.push(`Produtor "${pm.nameInFile}": ${error.message}`)
         else producerIdMap.set(pm.nameInFile, data.id)
+      }
+    }
+
+    // ── 1a. Criar produtores que só aparecem em eventos cancelados ──────────
+    // (sem nenhum evento pending, não entram em producerMaps — fix para evitar
+    //  produtores com saldo negativo sendo silenciosamente ignorados no import)
+    for (const cg of cancelledWithValues) {
+      if (producerIdMap.has(cg.producerName)) continue
+      const { data: existing } = await supabase.from('producers')
+        .select('id').eq('user_id', user.id).ilike('full_name', cg.producerName).maybeSingle()
+      if (existing) {
+        producerIdMap.set(cg.producerName, existing.id)
+      } else {
+        const { data, error } = await supabase.from('producers').insert({
+          user_id:  user.id,
+          full_name: cg.producerName,
+          email:    cg.email || null,
+          phone:    cg.phone || null,
+          pix_key:  cg.pix   || null,
+        }).select().single()
+        if (error) result.errors.push(`Produtor cancelado "${cg.producerName}": ${error.message}`)
+        else producerIdMap.set(cg.producerName, data.id)
       }
     }
 
@@ -495,6 +565,8 @@ export default function ImportWizard({ initialProducers }: Props) {
           event_date:  cg.dateStr,
           gross_revenue: 0, platform_fee: 0, net_amount: 0,
           status: 'cancelado',
+          billing_from: dtInicial,
+          billing_to:   dtFinal,
         }).select().single()
         if (error) { result.errors.push(`[CANCELADO] "${cg.show}": ${error.message}`); continue }
         eventId = newEv.id
@@ -510,19 +582,23 @@ export default function ImportWizard({ initialProducers }: Props) {
 
       if (!existingDebits?.length) {
         const debCancelled = [
-          { category: 'anuncio',          description: `Anúncio — ${cg.show} [cancelado]`,            amount: cg.advertising },
-          { category: 'emprestimo',       description: `Empréstimo — ${cg.show} [cancelado]`,          amount: cg.loan },
-          { category: 'juros_emprestimo', description: `Juros de Empréstimo — ${cg.show} [cancelado]`, amount: cg.loanInterest },
-          { category: 'voucher',          description: `Voucher — ${cg.show} [cancelado]`,             amount: cg.voucher },
-          { category: 'outros',           description: `Outros — ${cg.show} [cancelado]`,              amount: cg.otherExpenses },
+          { category: 'anuncio',             description: `Anúncio — ${cg.show} [cancelado]`,            amount: cg.advertising },
+          { category: 'emprestimo',          description: `Empréstimo — ${cg.show} [cancelado]`,          amount: cg.loan },
+          { category: 'juros_emprestimo',    description: `Juros de Empréstimo — ${cg.show} [cancelado]`, amount: cg.loanInterest },
+          { category: 'voucher',             description: `Voucher — ${cg.show} [cancelado]`,             amount: cg.voucher },
+          { category: 'outros',              description: `Outros — ${cg.show} [cancelado]`,              amount: cg.otherExpenses },
+          { category: 'taxa_administrativa', description: `Taxa Sistema — ${cg.show} [cancelado]`,        amount: cg.feeAdmin },
+          { category: 'outros',              description: `Taxa de Serviço — ${cg.show} [cancelado]`,     amount: cg.feeServiceFixed },
+          { category: 'outros',              description: `Locação — ${cg.show} [cancelado]`,             amount: cg.locacao },
         ]
         for (const d of debCancelled) {
           if (d.amount <= 0) continue
-          await supabase.from('account_entries').insert({
+          const { error: debErr } = await supabase.from('account_entries').insert({
             producer_id: producerId, event_id: eventId,
             entry_type: 'debito', category: d.category,
             description: d.description, amount: d.amount, date: cg.dateStr,
           })
+          if (debErr) throw debErr
           result.cancelledDebited++
         }
       }
@@ -641,20 +717,22 @@ export default function ImportWizard({ initialProducers }: Props) {
         }
 
         // Cobrança automática de cancelamentos pendentes
+        // Nota: o débito do evento cancelado já foi lançado no Step 4.
+        // Aqui apenas registramos a receita da BE — NÃO geramos crédito ao produtor,
+        // pois isso cancelaria o débito e inflaria o "A Pagar".
         const pendingAmt = pendingByProducer.get(producerId) ?? 0
         if (pendingAmt > 0) {
-          await supabase.from('account_entries').insert({
-            producer_id: producerId, event_id: eventId,
-            entry_type: 'credito', category: 'outros',
-            description: `Cobrança de cancelamento — descontado em ${evt.show}`,
-            amount: pendingAmt, date: evt.dateStr,
-          })
           await supabase.from('platform_entries').insert({
             user_id: user.id, event_id: eventId, producer_id: producerId,
             entry_type: 'receita', category: 'outros_receita',
             description: `Recuperação de cancelamento — ${evt.show}`,
             amount: pendingAmt, date: evt.dateStr,
           })
+          await supabase.from('events')
+            .update({ recovery_applied_at: new Date().toISOString() })
+            .eq('producer_id', producerId)
+            .eq('status', 'cancelado')
+            .is('recovery_applied_at', null)
           result.collectionsApplied++
           result.collectionsAmount = r2(result.collectionsAmount + pendingAmt)
           pendingByProducer.delete(producerId)

@@ -265,56 +265,6 @@ export default function BilheteriaClient({ initialEntries, needsRenewal = false,
         </div>
       </div>
 
-      {/* Histórico de períodos importados */}
-      {importHistory.length > 0 && (
-        <div className="bg-white rounded-xl border p-4">
-          <div className="flex items-center gap-2 mb-3">
-            <History className="h-4 w-4 text-gray-400" />
-            <span className="text-sm font-medium text-gray-600">Histórico de importações</span>
-            {dateRange && (
-              <button
-                onClick={() => setDateRange(undefined)}
-                className="ml-auto text-xs text-blue-600 hover:underline"
-              >
-                Limpar filtro
-              </button>
-            )}
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {importHistory.map(period => {
-              const isActive =
-                dateRange?.from?.toISOString().slice(0, 10) === period.dt_inicial &&
-                dateRange?.to?.toISOString().slice(0, 10) === period.dt_final
-              return (
-                <button
-                  key={period.id}
-                  onClick={() => {
-                    if (isActive) {
-                      setDateRange(undefined)
-                    } else {
-                      setDateRange({
-                        from: new Date(period.dt_inicial + 'T12:00:00'),
-                        to: new Date(period.dt_final + 'T12:00:00'),
-                      })
-                    }
-                  }}
-                  title={`${period.total_registros} registros · importado em ${new Date(period.imported_at).toLocaleDateString('pt-BR')}`}
-                  className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
-                    isActive
-                      ? 'bg-blue-600 border-blue-600 text-white'
-                      : 'border-gray-200 text-gray-600 hover:bg-gray-50'
-                  }`}
-                >
-                  {formatPeriodLabel(period.dt_inicial, period.dt_final)}
-                  <span className={`ml-1.5 text-xs ${isActive ? 'text-blue-100' : 'text-gray-400'}`}>
-                    {period.total_registros}
-                  </span>
-                </button>
-              )
-            })}
-          </div>
-        </div>
-      )}
 
       {/* Tabela */}
       <div className="bg-white rounded-xl border overflow-hidden">

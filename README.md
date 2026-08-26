@@ -119,8 +119,6 @@ Página `/dashboard/equipamentos` com duas abas:
 
 ## Interface
 
-- **Caracteres especiais**: a API de bilheteria retorna texto em Windows-1252 (encoding legado); a rota `/api/bilheteria/pagamentos` decodifica corretamente com `TextDecoder('windows-1252')` antes do `JSON.parse`, preservando aspas tipográficas, acentos e outros caracteres nos nomes de espetáculos.
-
 - **Máscara de moeda brasileira** em todos os campos de dinheiro (componente `CurrencyInput`): comportamento estilo ATM — dígitos preenchem da direita para a esquerda, últimos 2 são centavos. Ex: digitar `9000` exibe `R$ 90,00` em tempo real. Prefixo `R$` fixo, `inputMode="numeric"` para teclado numérico no celular.
 
 ## Segurança
