@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect, notFound } from 'next/navigation'
 import { getCategories } from '@/lib/supabase/categories'
+import { getOrCreateProfile } from '@/lib/supabase/profile'
 import ProducerStatementClient from '@/components/producers/ProducerStatementClient'
 
 export default async function ProducerStatementPage({
@@ -12,6 +13,14 @@ export default async function ProducerStatementPage({
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
+
+  const profile = await getOrCreateProfile(user.id, user.email ?? undefined)
+  // Produtor só acessa a própria página
+  if (profile.role === 'producer' && profile.producer_id !== id) {
+    if (profile.producer_id) redirect(`/dashboard/producers/${profile.producer_id}`)
+    redirect('/dashboard/producers/sem-vinculo')
+  }
+  const isReadOnly = profile.role === 'producer'
 
   const [
     { data: producer },
@@ -31,7 +40,10 @@ export default async function ProducerStatementPage({
 
   if (!producer) notFound()
 
-  const paidTotal = (orders ?? []).filter(o => o.status === 'paid').reduce((s, o) => s + o.amount, 0)
+  // Passa as OPs pagas individualmente para o cliente poder filtrar por período
+  const paidOrders = (orders ?? [])
+    .filter(o => o.status === 'paid')
+    .map(o => ({ amount: o.amount, event_ids: o.event_ids ?? [] }))
   // Eventos já cobertos por alguma OP (pendente ou paga) — não devem ser reemitidos
   const emittedEventIds = [...new Set((orders ?? []).flatMap(o => o.event_ids ?? []))]
 
@@ -43,8 +55,9 @@ export default async function ProducerStatementPage({
       rentals={rentals ?? []}
       categories={categories}
       userId={user.id}
-      paidTotal={paidTotal}
+      paidOrders={paidOrders}
       emittedEventIds={emittedEventIds}
+      isReadOnly={isReadOnly}
     />
   )
 }

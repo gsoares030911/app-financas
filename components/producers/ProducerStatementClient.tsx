@@ -35,12 +35,13 @@ interface Props {
   rentals: EquipmentRental[]
   categories?: Category[]
   userId: string
-  paidTotal?: number
+  paidOrders?: Array<{ amount: number; event_ids: string[] }>
   emittedEventIds?: string[]
+  isReadOnly?: boolean
 }
 
 
-export default function ProducerStatementClient({ producer: initialProducer, entries, events, rentals, categories: propCategories, userId, paidTotal = 0, emittedEventIds = [] }: Props) {
+export default function ProducerStatementClient({ producer: initialProducer, entries, events, rentals, categories: propCategories, userId, paidOrders = [], emittedEventIds = [], isReadOnly = false }: Props) {
   const systemCats = SYSTEM_CATEGORIES.map(c => ({ ...c, id: c.slug, user_id: '', created_at: '' }))
   const cats = (propCategories && propCategories.length > 0) ? propCategories : systemCats
   const catLabels: Record<string, string> = Object.fromEntries(cats.map(c => [c.slug, c.name]))
@@ -61,6 +62,7 @@ export default function ProducerStatementClient({ producer: initialProducer, ent
   const [generatingCharges, setGeneratingCharges] = useState(false)
   const [filterType, setFilterType] = useState('all')
   const [filterCategory, setFilterCategory] = useState('all')
+  const [expectedRaw, setExpectedRaw] = useState('')
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined)
   const [selectedEventIds, setSelectedEventIds] = useState<Set<string>>(new Set())
 
@@ -103,11 +105,33 @@ export default function ProducerStatementClient({ producer: initialProducer, ent
   const totalCredits = cardEntries.filter(e => e.entry_type === 'credito').reduce((s, e) => s + e.amount, 0)
   const totalDebits  = cardEntries.filter(e => e.entry_type === 'debito').reduce((s, e) => s + e.amount, 0)
   const totalBonus   = cardEntries.filter(e => e.category === 'bonificacao' && e.entry_type === 'credito').reduce((s, e) => s + e.amount, 0)
-  // "Valor Bruto" = vendas, SEM o BV (bonificação). O BV continua no saldo (é crédito do produtor),
-  // só não é somado no bruto.
   const totalGross   = totalCredits - totalBonus
-  // paidTotal: soma das OPs liquidadas — subtrai do saldo a pagar ao produtor
+
+  // IDs dos eventos dentro do período selecionado (para filtrar paidTotal)
+  const periodEventIds = useMemo(() => {
+    if (!dateRange?.from) return null
+    const fromStr = ymd(dateRange.from)
+    const toStr = dateRange.to ? ymd(dateRange.to) : null
+    return new Set(
+      events
+        .filter(e => {
+          const d = (e as ProducerEvent & { billing_from?: string | null }).billing_from ?? e.event_date
+          return d >= fromStr && (!toStr || d <= toStr)
+        })
+        .map(e => e.id)
+    )
+  }, [events, dateRange])
+
+  // paidTotal: soma das OPs pagas. Com período, só conta OPs que cobrem eventos do período.
+  const paidTotal = useMemo(() => {
+    if (!periodEventIds) return paidOrders.reduce((s, o) => s + o.amount, 0)
+    return paidOrders
+      .filter(o => o.event_ids.some(id => periodEventIds.has(id)))
+      .reduce((s, o) => s + o.amount, 0)
+  }, [paidOrders, periodEventIds])
+
   const balance = totalCredits - totalDebits - paidTotal
+  const displayBalance = Math.round(balance * 100) / 100
 
   const salesChartData = useMemo(() => {
     const salesEntries = cardEntries.filter(e => e.entry_type === 'credito' && e.category === 'venda_evento')
@@ -395,52 +419,56 @@ export default function ProducerStatementClient({ producer: initialProducer, ent
           <h1 className="text-2xl font-bold text-gray-900 truncate">{producer.full_name}</h1>
           <p className="text-sm text-gray-500">Conta Corrente</p>
         </div>
-        <Button variant="outline" size="sm" onClick={() => setEditingProducer(true)}>
-          <Edit2 className="h-3.5 w-3.5 mr-1.5" />
-          Editar
-        </Button>
+        {!isReadOnly && (
+          <Button variant="outline" size="sm" onClick={() => setEditingProducer(true)}>
+            <Edit2 className="h-3.5 w-3.5 mr-1.5" />
+            Editar
+          </Button>
+        )}
       </div>
 
       {/* Balance + Info */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <Card className={`${balance >= 0 ? 'border-green-200 bg-green-50/50' : 'border-red-200 bg-red-50/50'}`}>
+        <Card className={`${displayBalance >= 0 ? 'border-green-200 bg-green-50/50' : 'border-red-200 bg-red-50/50'}`}>
           <CardContent className="pt-4">
             <div className="flex justify-center gap-2 mb-3 flex-wrap">
               <DateRangePicker value={dateRange} onChange={setDateRange} />
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-8 text-xs border-blue-200 text-blue-700 hover:bg-blue-50"
-                onClick={() => {
-                  const pendingIds = events
-                    .filter(ev => ev.status === 'pending' && (() => {
-                      if (!dateRange?.from) return true
-                      const dateKey = ev.billing_from ?? ev.event_date
-                      const fromStr = ymd(dateRange.from)
-                      const toStr = dateRange.to ? ymd(dateRange.to) : null
-                      return dateKey >= fromStr && (!toStr || dateKey <= toStr)
-                    })())
-                    .map(ev => ev.id)
-                  emitirOP(
-                    pendingIds,
-                    dateRange?.from?.toISOString().split('T')[0],
-                    dateRange?.to?.toISOString().split('T')[0],
-                  )
-                }}
-              >
-                <FileText className="h-3.5 w-3.5 mr-1" />
-                Emitir OP
-              </Button>
+              {!isReadOnly && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-8 text-xs border-blue-200 text-blue-700 hover:bg-blue-50"
+                  onClick={() => {
+                    const pendingIds = events
+                      .filter(ev => ev.status === 'pending' && (() => {
+                        if (!dateRange?.from) return true
+                        const dateKey = ev.billing_from ?? ev.event_date
+                        const fromStr = ymd(dateRange.from)
+                        const toStr = dateRange.to ? ymd(dateRange.to) : null
+                        return dateKey >= fromStr && (!toStr || dateKey <= toStr)
+                      })())
+                      .map(ev => ev.id)
+                    emitirOP(
+                      pendingIds,
+                      dateRange?.from?.toISOString().split('T')[0],
+                      dateRange?.to?.toISOString().split('T')[0],
+                    )
+                  }}
+                >
+                  <FileText className="h-3.5 w-3.5 mr-1" />
+                  Emitir OP
+                </Button>
+              )}
             </div>
             <div className="text-center">
               <p className="text-xs font-medium text-gray-400 mb-0.5">
                 {dateRange?.from ? 'Período selecionado' : 'Acumulado total'}
               </p>
               <p className="text-sm font-medium text-gray-500 mb-1">
-                {balance >= 0 ? 'A Pagar ao Produtor' : 'Produtor Deve'}
+                {displayBalance >= 0 ? 'A Pagar ao Produtor' : 'Produtor Deve'}
               </p>
-              <p className={`text-3xl font-bold ${balance >= 0 ? 'text-green-700' : 'text-red-700'}`}>
-                {formatCurrency(Math.abs(balance))}
+              <p className={`text-3xl font-bold ${displayBalance >= 0 ? 'text-green-700' : 'text-red-700'}`}>
+                {formatCurrency(Math.abs(displayBalance))}
               </p>
               <div className="flex justify-center gap-6 mt-4 text-xs text-gray-500">
                 <div className="text-center">
@@ -462,6 +490,45 @@ export default function ProducerStatementClient({ producer: initialProducer, ent
                   </div>
                 )}
               </div>
+
+              {/* ── Verificação contra planilha externa ── */}
+              {!isReadOnly && (() => {
+                const expectedNum = parseFloat(expectedRaw.replace(/\./g, '').replace(',', '.'))
+                const isValid = !isNaN(expectedNum) && expectedRaw.trim() !== ''
+                const diff = isValid ? Math.round((balance - expectedNum) * 100) / 100 : null
+                const ok = diff !== null && Math.abs(diff) < 0.02
+                return (
+                  <div className="mt-4 border-t pt-3 space-y-2">
+                    <p className="text-xs text-gray-400 text-center">Verificar contra planilha</p>
+                    <div className="flex items-center gap-2 justify-center">
+                      <span className="text-xs text-gray-500">R$</span>
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        placeholder="0,00"
+                        value={expectedRaw}
+                        onChange={e => setExpectedRaw(e.target.value)}
+                        className="w-32 text-center text-sm border rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-400"
+                      />
+                    </div>
+                    {isValid && (
+                      ok ? (
+                        <div className="flex items-center justify-center gap-1.5 text-xs font-semibold text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
+                          <span>✓</span>
+                          <span>Valores conferem</span>
+                        </div>
+                      ) : (
+                        <div className="text-xs font-semibold text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2 space-y-0.5 text-center">
+                          <p>⚠ Divergência de {formatCurrency(Math.abs(diff!))}</p>
+                          <p className="font-normal text-red-500">
+                            {diff! > 0 ? 'Sistema maior — reimporte o período' : 'Sistema menor — verifique os dados'}
+                          </p>
+                        </div>
+                      )
+                    )}
+                  </div>
+                )
+              })()}
 
             </div>
           </CardContent>
@@ -570,10 +637,12 @@ export default function ProducerStatementClient({ producer: initialProducer, ent
                 </SelectContent>
               </Select>
             </div>
-            <Button onClick={() => { setEditEntry(null); setEntryOpen(true) }}>
-              <Plus className="h-4 w-4 mr-2" />
-              Novo Lançamento
-            </Button>
+            {!isReadOnly && (
+              <Button onClick={() => { setEditEntry(null); setEntryOpen(true) }}>
+                <Plus className="h-4 w-4 mr-2" />
+                Novo Lançamento
+              </Button>
+            )}
           </div>
 
           <Card>
@@ -633,16 +702,18 @@ export default function ProducerStatementClient({ producer: initialProducer, ent
                         <TableCell className={`text-right text-sm whitespace-nowrap font-medium ${e.runningBalance >= 0 ? 'text-gray-700' : 'text-red-600'}`}>
                           {formatCurrency(e.runningBalance)}
                         </TableCell>
-                        <TableCell>
-                          <div className="flex gap-1 justify-end">
-                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setEditEntry(e); setEntryOpen(true) }}>
-                              <Edit2 className="h-3.5 w-3.5" />
-                            </Button>
-                            <Button variant="ghost" size="icon" className="h-7 w-7 text-red-500 hover:text-red-700 hover:bg-red-50" onClick={() => deleteEntry(e.id)}>
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
-                          </div>
-                        </TableCell>
+                        {!isReadOnly && (
+                          <TableCell>
+                            <div className="flex gap-1 justify-end">
+                              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setEditEntry(e); setEntryOpen(true) }}>
+                                <Edit2 className="h-3.5 w-3.5" />
+                              </Button>
+                              <Button variant="ghost" size="icon" className="h-7 w-7 text-red-500 hover:text-red-700 hover:bg-red-50" onClick={() => deleteEntry(e.id)}>
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        )}
                       </TableRow>
                     ))
                   )}
@@ -654,15 +725,17 @@ export default function ProducerStatementClient({ producer: initialProducer, ent
 
         {/* ── Eventos ── */}
         <TabsContent value="eventos" className="space-y-4 mt-4">
-          <div className="flex items-center justify-between gap-2 flex-wrap">
-            <Button onClick={() => { setEditEvent(null); setEventOpen(true) }}>
-              <Plus className="h-4 w-4 mr-2" />
-              Novo Evento
-            </Button>
-          </div>
+          {!isReadOnly && (
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <Button onClick={() => { setEditEvent(null); setEventOpen(true) }}>
+                <Plus className="h-4 w-4 mr-2" />
+                Novo Evento
+              </Button>
+            </div>
+          )}
 
           {/* Barra de ação em massa */}
-          {selectedEventIds.size > 0 && (
+          {!isReadOnly && selectedEventIds.size > 0 && (
             <div className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-xl px-4 py-3">
               <span className="text-sm font-medium text-blue-700">
                 {selectedEventIds.size} evento{selectedEventIds.size !== 1 ? 's' : ''} selecionado{selectedEventIds.size !== 1 ? 's' : ''}
@@ -778,16 +851,18 @@ export default function ProducerStatementClient({ producer: initialProducer, ent
                             {ev.status === 'settled' ? 'Liquidado' : 'Pendente'}
                           </Badge>
                         </TableCell>
-                        <TableCell>
-                          <div className="flex gap-1 justify-end">
-                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setEditEvent(ev); setEventOpen(true) }}>
-                              <Edit2 className="h-3.5 w-3.5" />
-                            </Button>
-                            <Button variant="ghost" size="icon" className="h-7 w-7 text-red-500 hover:text-red-700 hover:bg-red-50" onClick={() => deleteEvent(ev.id)}>
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
-                          </div>
-                        </TableCell>
+                        {!isReadOnly && (
+                          <TableCell>
+                            <div className="flex gap-1 justify-end">
+                              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setEditEvent(ev); setEventOpen(true) }}>
+                                <Edit2 className="h-3.5 w-3.5" />
+                              </Button>
+                              <Button variant="ghost" size="icon" className="h-7 w-7 text-red-500 hover:text-red-700 hover:bg-red-50" onClick={() => deleteEvent(ev.id)}>
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        )}
                       </TableRow>
                       )
                     })
@@ -800,19 +875,21 @@ export default function ProducerStatementClient({ producer: initialProducer, ent
 
         {/* ── Equipamentos ── */}
         <TabsContent value="equipamentos" className="space-y-4 mt-4">
-          <div className="flex justify-end gap-2">
-            <Button
-              variant="outline"
-              onClick={gerarCobrancasMes}
-              disabled={generatingCharges}
-            >
-              {generatingCharges ? 'Gerando...' : 'Gerar cobranças do mês'}
-            </Button>
-            <Button onClick={() => { setEditRental(null); setRentalOpen(true) }}>
-              <Plus className="h-4 w-4 mr-2" />
-              Novo Equipamento
-            </Button>
-          </div>
+          {!isReadOnly && (
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="outline"
+                onClick={gerarCobrancasMes}
+                disabled={generatingCharges}
+              >
+                {generatingCharges ? 'Gerando...' : 'Gerar cobranças do mês'}
+              </Button>
+              <Button onClick={() => { setEditRental(null); setRentalOpen(true) }}>
+                <Plus className="h-4 w-4 mr-2" />
+                Novo Equipamento
+              </Button>
+            </div>
+          )}
           <Card>
             <div className="overflow-x-auto">
               <Table>
@@ -862,16 +939,18 @@ export default function ProducerStatementClient({ producer: initialProducer, ent
                             {r.is_active ? 'Ativo' : 'Inativo'}
                           </Badge>
                         </TableCell>
-                        <TableCell>
-                          <div className="flex gap-1 justify-end">
-                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setEditRental(r); setRentalOpen(true) }}>
-                              <Edit2 className="h-3.5 w-3.5" />
-                            </Button>
-                            <Button variant="ghost" size="icon" className="h-7 w-7 text-red-500 hover:text-red-700 hover:bg-red-50" onClick={() => deleteRental(r.id)}>
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
-                          </div>
-                        </TableCell>
+                        {!isReadOnly && (
+                          <TableCell>
+                            <div className="flex gap-1 justify-end">
+                              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setEditRental(r); setRentalOpen(true) }}>
+                                <Edit2 className="h-3.5 w-3.5" />
+                              </Button>
+                              <Button variant="ghost" size="icon" className="h-7 w-7 text-red-500 hover:text-red-700 hover:bg-red-50" onClick={() => deleteRental(r.id)}>
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        )}
                       </TableRow>
                     ))
                   )}

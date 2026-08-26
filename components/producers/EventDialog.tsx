@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
 import type { ProducerEvent, EventFormData, EventStatus } from '@/lib/types'
-import ProducerSplitSection, { type ProducerSplitItem } from './ProducerSplitSection'
+import ProducerSplitSection, { type ProducerSplitItem, computeSplitAmount } from './ProducerSplitSection'
 import { Ticket } from 'lucide-react'
 
 interface Props {
@@ -111,15 +111,16 @@ export default function EventDialog({ open, onOpenChange, producerId, event }: P
   }
 
   const netAmount = Number(form.net_amount)
-  const totalOtherPct = producerSplits.reduce((s, x) => s + Number(x.percent || 0), 0)
-  const currentPct = Math.max(0, 100 - totalOtherPct)
-  const currentAmount = (netAmount * currentPct) / 100
+  const totalOthers = producerSplits.reduce((s, x) => s + computeSplitAmount(x, netAmount), 0)
+  const currentAmount = Math.max(0, netAmount - totalOthers)
+  const currentPct = netAmount > 0 ? (currentAmount / netAmount * 100) : 0
+  const overLimit = totalOthers > netAmount + 0.001
   const hasProducerSplits = producerSplits.length > 0
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!form.name.trim()) { toast.error('Nome do evento é obrigatório'); return }
-    if (totalOtherPct > 100) { toast.error('Total do rateio ultrapassa 100%'); return }
+    if (overLimit) { toast.error('Total do rateio ultrapassa o valor líquido'); return }
 
     setLoading(true)
     try {
@@ -163,22 +164,53 @@ export default function EventDialog({ open, onOpenChange, producerId, event }: P
           }
         }
 
-        // Lançamentos para produtores no rateio
+        // Lançamentos e OPs para produtores no rateio
         if (autoCreateSplits && hasProducerSplits) {
-          const splitInserts = producerSplits
-            .filter(s => s.producer_id && Number(s.percent) > 0)
-            .map(s => ({
+          const validSplits = producerSplits.filter(s => {
+            if (!s.producer_id) return false
+            return s.mode === 'R$' ? Number(s.value) > 0 : Number(s.percent) > 0
+          })
+
+          if (validSplits.length > 0) {
+            // Account entries
+            const splitInserts = validSplits.map(s => ({
               producer_id: s.producer_id,
               event_id: newEvent.id,
               entry_type: 'credito' as const,
               category: 'venda_evento' as const,
               description: `Venda de ingresso — ${payload.name}`,
-              amount: Math.round((netAmount * Number(s.percent) / 100) * 100) / 100,
+              amount: computeSplitAmount(s, netAmount),
               date: payload.event_date,
             }))
-          if (splitInserts.length > 0) {
-            const { error } = await supabase.from('account_entries').insert(splitInserts)
-            if (error) throw error
+            const { error: entryError } = await supabase.from('account_entries').insert(splitInserts)
+            if (entryError) throw entryError
+
+            // Criar OPs para cada produtor rateado
+            const { data: { user } } = await supabase.auth.getUser()
+            if (user) {
+              const year = new Date().getFullYear()
+              const { count } = await supabase
+                .from('payment_orders')
+                .select('id', { count: 'exact', head: true })
+                .eq('user_id', user.id)
+                .like('order_number', `OP-${year}-%`)
+              let n = count ?? 0
+              const opInserts = validSplits.map(s => {
+                n += 1
+                return {
+                  user_id: user.id,
+                  producer_id: s.producer_id,
+                  order_number: `OP-${year}-${String(n).padStart(3, '0')}`,
+                  amount: computeSplitAmount(s, netAmount),
+                  status: 'pending' as const,
+                  event_ids: [newEvent.id],
+                  period_from: payload.event_date,
+                  period_to: payload.event_date,
+                }
+              })
+              const { error: opError } = await supabase.from('payment_orders').insert(opInserts)
+              if (opError) console.error('Erro ao criar OPs de rateio:', opError)
+            }
           }
         }
 
@@ -324,13 +356,15 @@ export default function EventDialog({ open, onOpenChange, producerId, event }: P
           )}
 
           {/* Aviso do valor que será lançado nesta conta quando há rateio */}
-          {hasProducerSplits && netAmount > 0 && currentPct > 0 && (
+          {hasProducerSplits && netAmount > 0 && currentAmount > 0 && (
             <div className="text-sm rounded bg-green-50 border border-green-200 px-3 py-2 text-green-700">
               Será lançado nesta conta:{' '}
               <span className="font-semibold">
                 R$ {currentAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
               </span>
-              <span className="text-xs text-green-600 ml-1">({currentPct}%)</span>
+              <span className="text-xs text-green-600 ml-1">
+                ({currentPct % 1 === 0 ? currentPct.toFixed(0) : currentPct.toFixed(2)}%)
+              </span>
             </div>
           )}
 

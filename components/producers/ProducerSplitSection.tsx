@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { CurrencyInput } from '@/components/ui/currency-input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Plus, Trash2, Building2, Hash, AlertTriangle } from 'lucide-react'
 import type { Producer } from '@/lib/types'
@@ -11,7 +12,9 @@ import type { Producer } from '@/lib/types'
 export interface ProducerSplitItem {
   uid: string
   producer_id: string
+  mode: '%' | 'R$'
   percent: string
+  value: string
 }
 
 interface Props {
@@ -21,6 +24,11 @@ interface Props {
   onChange: (splits: ProducerSplitItem[]) => void
   autoCreate: boolean
   onAutoCreateChange: (v: boolean) => void
+}
+
+export function computeSplitAmount(split: ProducerSplitItem, netAmount: number): number {
+  if (split.mode === 'R$') return Number(split.value || 0)
+  return Math.round((netAmount * Number(split.percent || 0) / 100) * 100) / 100
 }
 
 export default function ProducerSplitSection({
@@ -43,17 +51,31 @@ export default function ProducerSplitSection({
       .then(({ data }) => setProducers(data ?? []))
   }, [currentProducerId]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const totalOtherPct = splits.reduce((s, x) => s + Number(x.percent || 0), 0)
-  const currentPct = Math.max(0, 100 - totalOtherPct)
-  const currentAmount = (netAmount * currentPct) / 100
-  const overLimit = totalOtherPct > 100
+  const totalOthers = splits.reduce((s, x) => s + computeSplitAmount(x, netAmount), 0)
+  const currentAmount = Math.max(0, netAmount - totalOthers)
+  const currentPct = netAmount > 0 ? (currentAmount / netAmount * 100) : 0
+  const overLimit = totalOthers > netAmount + 0.001
 
   function add() {
-    onChange([...splits, { uid: crypto.randomUUID(), producer_id: '', percent: '' }])
+    onChange([...splits, { uid: crypto.randomUUID(), producer_id: '', mode: '%', percent: '', value: '' }])
   }
 
-  function update(uid: string, field: 'producer_id' | 'percent', value: string) {
+  function updateField(uid: string, field: keyof ProducerSplitItem, value: string) {
     onChange(splits.map(s => s.uid === uid ? { ...s, [field]: value } : s))
+  }
+
+  function toggleMode(uid: string) {
+    onChange(splits.map(s => {
+      if (s.uid !== uid) return s
+      const newMode = s.mode === '%' ? 'R$' : '%'
+      // Convert current value on mode switch
+      const converted = newMode === 'R$'
+        ? String(Math.round((netAmount * Number(s.percent || 0) / 100) * 100) / 100)
+        : netAmount > 0
+          ? String(Math.round((Number(s.value || 0) / netAmount * 100) * 100) / 100)
+          : ''
+      return { ...s, mode: newMode, percent: newMode === '%' ? converted : s.percent, value: newMode === 'R$' ? converted : s.value }
+    }))
   }
 
   function remove(uid: string) {
@@ -74,17 +96,16 @@ export default function ProducerSplitSection({
       </p>
 
       {splits.map(split => {
-        const pct = Number(split.percent || 0)
-        const amount = (netAmount * pct) / 100
+        const amount = computeSplitAmount(split, netAmount)
         const p = split.producer_id ? getProducer(split.producer_id) : null
 
         return (
           <div key={split.uid} className="rounded-md border border-purple-100 bg-white p-3 space-y-2">
-            {/* Linha: produtor + % + lixeira */}
+            {/* Linha: produtor + valor + modo + lixeira */}
             <div className="flex items-center gap-2">
               <Select
                 value={split.producer_id || 'none'}
-                onValueChange={v => update(split.uid, 'producer_id', v === 'none' ? '' : (v ?? ''))}
+                onValueChange={v => updateField(split.uid, 'producer_id', v === 'none' ? '' : (v ?? ''))}
               >
                 <SelectTrigger className="flex-1 text-sm">
                   <SelectValue placeholder="Selecionar produtor..." />
@@ -97,18 +118,48 @@ export default function ProducerSplitSection({
                 </SelectContent>
               </Select>
 
-              <div className="relative w-24 flex-shrink-0">
-                <Input
-                  type="number"
-                  min="0"
-                  max="100"
-                  step="0.01"
-                  value={split.percent}
-                  onChange={e => update(split.uid, 'percent', e.target.value)}
-                  placeholder="0"
-                  className="pr-6 text-right"
-                />
-                <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-gray-400 pointer-events-none">%</span>
+              {/* Toggle % / R$ */}
+              <div className="flex rounded-md border border-gray-200 overflow-hidden flex-shrink-0">
+                {(['%', 'R$'] as const).map(m => (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => split.mode !== m && toggleMode(split.uid)}
+                    className={`px-2.5 py-1.5 text-xs font-semibold transition-colors ${
+                      split.mode === m
+                        ? 'bg-purple-600 text-white'
+                        : 'bg-white text-gray-500 hover:bg-gray-50'
+                    }`}
+                  >
+                    {m}
+                  </button>
+                ))}
+              </div>
+
+              {/* Input de valor */}
+              <div className="w-28 flex-shrink-0">
+                {split.mode === '%' ? (
+                  <div className="relative">
+                    <Input
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.01"
+                      value={split.percent}
+                      onChange={e => updateField(split.uid, 'percent', e.target.value)}
+                      placeholder="0"
+                      className="pr-6 text-right"
+                    />
+                    <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-gray-400 pointer-events-none">%</span>
+                  </div>
+                ) : (
+                  <CurrencyInput
+                    value={split.value || ''}
+                    onValueChange={raw => updateField(split.uid, 'value', raw)}
+                    placeholder="0,00"
+                    className="text-right"
+                  />
+                )}
               </div>
 
               <Button
@@ -122,8 +173,8 @@ export default function ProducerSplitSection({
               </Button>
             </div>
 
-            {/* Valor calculado */}
-            {pct > 0 && netAmount > 0 && (
+            {/* Valor calculado (quando em % mode) */}
+            {split.mode === '%' && Number(split.percent) > 0 && netAmount > 0 && (
               <div className="text-sm font-semibold text-purple-700 px-1">
                 = R$ {fmt(amount)}
               </div>
@@ -169,16 +220,17 @@ export default function ProducerSplitSection({
         }`}>
           <span>Produtor desta conta fica com</span>
           <span className={`font-semibold ${overLimit ? 'text-red-700' : 'text-green-700'}`}>
-            {fmtPct(currentPct)}%
-            {netAmount > 0 && !overLimit && ` = R$ ${fmt(currentAmount)}`}
-            {overLimit && ' ← percentual inválido'}
+            {overLimit
+              ? 'valor inválido ← ultrapassa o líquido'
+              : `${fmtPct(currentPct)}% = R$ ${fmt(currentAmount)}`
+            }
           </span>
         </div>
       )}
 
       {overLimit && (
         <p className="text-xs text-red-600 px-1 flex items-center gap-1">
-          <AlertTriangle className="h-3 w-3" /> Total dos outros produtores ultrapassa 100%.
+          <AlertTriangle className="h-3 w-3" /> Total dos outros produtores ultrapassa o líquido do evento.
         </p>
       )}
 
@@ -195,7 +247,7 @@ export default function ProducerSplitSection({
             onChange={e => onAutoCreateChange(e.target.checked)}
             className="rounded"
           />
-          Criar lançamento automático nas contas de cada produtor rateado
+          Criar lançamento e OP automáticos para cada produtor rateado
         </label>
       )}
     </div>
