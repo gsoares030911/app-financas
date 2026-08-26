@@ -124,7 +124,7 @@ Página `/dashboard/equipamentos` com duas abas:
 - **Máscara de moeda brasileira** em todos os campos de dinheiro (componente `CurrencyInput`): comportamento estilo ATM — dígitos preenchem da direita para a esquerda, últimos 2 são centavos. Ex: digitar `9000` exibe `R$ 90,00` em tempo real. Prefixo `R$` fixo, `inputMode="numeric"` para teclado numérico no celular.
 
 ## Segurança
-- Middleware Next.js (`middleware.ts`) protege todas as rotas `/dashboard` e redireciona usuários não autenticados
+- Proxy Next.js (`proxy.ts`) protege todas as rotas `/dashboard` e redireciona usuários não autenticados
 - Server Actions com verificação dupla de autenticação + papel
 - `SUPABASE_SERVICE_ROLE_KEY` usado exclusivamente server-side
 - Proteção dupla (UI + servidor) contra alteração/exclusão do Super Admin
