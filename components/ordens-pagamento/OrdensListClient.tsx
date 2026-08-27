@@ -6,13 +6,14 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { formatCurrency } from '@/lib/utils/format'
 import { toast } from 'sonner'
-import { Eye, CheckCircle, Loader2, FileText, Trash2, Download, CheckCheck } from 'lucide-react'
+import { Eye, CheckCircle, Loader2, FileText, Trash2, Download, CheckCheck, Mail } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import ExportarCNABModal from './ExportarCNABModal'
+import EnviarEmailModal from './EnviarEmailModal'
 import type { PaymentOrder, Producer } from '@/lib/types'
 import type { EmpresaConfig } from '@/lib/utils/cnab240'
 
-type ProducerBankInfo = Pick<Producer, 'id' | 'full_name' | 'cpf_cnpj' | 'bank_name' | 'bank_agency' | 'bank_account' | 'pix_key'>
+type ProducerBankInfo = Pick<Producer, 'id' | 'full_name' | 'email' | 'cpf_cnpj' | 'bank_name' | 'bank_agency' | 'bank_account' | 'pix_key'>
 
 interface Props {
   orders: PaymentOrder[]
@@ -39,6 +40,7 @@ export default function OrdensListClient({ orders: initialOrders, producers, cna
   const [confirmingBulk, setConfirmingBulk] = useState(false)
   const [deleting, setDeleting] = useState<string | null>(null)
   const [showCNAB, setShowCNAB] = useState(false)
+  const [showEmail, setShowEmail] = useState(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
 
   const producerMap = new Map(producers.map(p => [p.id, p.full_name]))
@@ -48,16 +50,16 @@ export default function OrdensListClient({ orders: initialOrders, producers, cna
   const pendingCount = pendingOrders.length
   const paidCount    = orders.filter(o => o.status === 'paid').length
 
-  // Selecção — apenas na aba pendentes
-  const allPendingIds = pendingOrders.map(o => o.id)
-  const allSelected = allPendingIds.length > 0 && allPendingIds.every(id => selected.has(id))
-  const someSelected = allPendingIds.some(id => selected.has(id))
+  // Selecção — dentro da aba corrente (pendentes ou pagas)
+  const allTabIds = filtered.map(o => o.id)
+  const allSelected = allTabIds.length > 0 && allTabIds.every(id => selected.has(id))
+  const someSelected = allTabIds.some(id => selected.has(id))
 
   function toggleAll() {
     if (allSelected) {
       setSelected(new Set())
     } else {
-      setSelected(new Set(allPendingIds))
+      setSelected(new Set(allTabIds))
     }
   }
 
@@ -69,7 +71,12 @@ export default function OrdensListClient({ orders: initialOrders, producers, cna
     })
   }
 
-  const selectedOrders = pendingOrders.filter(o => selected.has(o.id))
+  function changeTab(t: TabStatus) {
+    setTab(t)
+    setSelected(new Set())
+  }
+
+  const selectedOrders = filtered.filter(o => selected.has(o.id))
 
   async function confirmPaymentBulk() {
     if (selectedOrders.length === 0) return
@@ -203,6 +210,14 @@ export default function OrdensListClient({ orders: initialOrders, producers, cna
         />
       )}
 
+      {showEmail && (
+        <EnviarEmailModal
+          orders={selectedOrders}
+          producers={producers}
+          onClose={() => setShowEmail(false)}
+        />
+      )}
+
       {/* Tabs + botão CNAB */}
       <div className="flex items-center justify-between border-b">
         <div className="flex gap-1">
@@ -212,7 +227,7 @@ export default function OrdensListClient({ orders: initialOrders, producers, cna
           ]).map(t => (
             <button
               key={t.key}
-              onClick={() => setTab(t.key)}
+              onClick={() => changeTab(t.key)}
               className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px flex items-center gap-2 ${
                 tab === t.key
                   ? 'border-blue-600 text-blue-700'
@@ -264,6 +279,22 @@ export default function OrdensListClient({ orders: initialOrders, producers, cna
             </Button>
           </div>
         )}
+
+        {tab === 'paid' && selectedOrders.length > 0 && (
+          <div className="flex items-center gap-2 mb-px">
+            <Button
+              size="sm"
+              onClick={() => setShowEmail(true)}
+              className="text-xs flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white"
+            >
+              <Mail className="h-3.5 w-3.5" />
+              Enviar Email
+              <span className="ml-0.5 bg-blue-500 font-bold rounded-full px-1.5 py-px text-xs">
+                {selectedOrders.length}
+              </span>
+            </Button>
+          </div>
+        )}
       </div>
 
       {/* Lista */}
@@ -285,18 +316,16 @@ export default function OrdensListClient({ orders: initialOrders, producers, cna
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b bg-gray-50">
-                  {tab === 'pending' && (
-                    <th className="pl-4 pr-2 py-3 w-8">
-                      <input
-                        type="checkbox"
-                        checked={allSelected}
-                        ref={el => { if (el) el.indeterminate = someSelected && !allSelected }}
-                        onChange={toggleAll}
-                        className="h-4 w-4 rounded border-gray-300 text-blue-600 cursor-pointer"
-                        title="Selecionar todas"
-                      />
-                    </th>
-                  )}
+                  <th className="pl-4 pr-2 py-3 w-8">
+                    <input
+                      type="checkbox"
+                      checked={allSelected}
+                      ref={el => { if (el) el.indeterminate = someSelected && !allSelected }}
+                      onChange={toggleAll}
+                      className="h-4 w-4 rounded border-gray-300 text-blue-600 cursor-pointer"
+                      title="Selecionar todas"
+                    />
+                  </th>
                   <th className="px-4 py-3 text-left font-semibold text-gray-600">Nº da OP</th>
                   <th className="px-4 py-3 text-left font-semibold text-gray-600">Produtor</th>
                   <th className="px-4 py-3 text-left font-semibold text-gray-600">Emitida em</th>
@@ -316,16 +345,14 @@ export default function OrdensListClient({ orders: initialOrders, producers, cna
                       key={order.id}
                       className={`transition-colors ${isChecked ? 'bg-blue-50 hover:bg-blue-50' : 'hover:bg-gray-50'}`}
                     >
-                      {tab === 'pending' && (
-                        <td className="pl-4 pr-2 py-3">
-                          <input
-                            type="checkbox"
-                            checked={isChecked}
-                            onChange={() => toggleOne(order.id)}
-                            className="h-4 w-4 rounded border-gray-300 text-blue-600 cursor-pointer"
-                          />
-                        </td>
-                      )}
+                      <td className="pl-4 pr-2 py-3">
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => toggleOne(order.id)}
+                          className="h-4 w-4 rounded border-gray-300 text-blue-600 cursor-pointer"
+                        />
+                      </td>
                       <td className="px-4 py-3">
                         <span className="font-mono font-semibold text-blue-700 bg-blue-50 px-2 py-0.5 rounded text-xs">
                           {order.order_number}
