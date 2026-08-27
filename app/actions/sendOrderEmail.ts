@@ -7,21 +7,27 @@ import { getOrdemPagamentoData } from '@/lib/ordemPagamento'
 import { OrdemPagamentoDocument } from '@/lib/pdf/OrdemPagamentoDocument'
 import { formatCurrency } from '@/lib/utils/format'
 
+export interface OrderEmailRequest {
+  orderId: string
+  emails: string[]
+}
+
 export interface SendOrderEmailResult {
   sent: string[]
   errors: { orderNumber: string; error: string }[]
 }
 
-export async function sendOrdemPagamentoEmails(orderIds: string[], emails: string[]): Promise<SendOrderEmailResult> {
+// Cada item de `requests` é enviado SOMENTE para os emails daquele próprio item —
+// nunca para os emails de outra OP/produtor da mesma leva. Isso é intencional:
+// evita que o PDF (com dados bancários) de um produtor vaze para outro.
+export async function sendOrdemPagamentoEmails(requests: OrderEmailRequest[]): Promise<SendOrderEmailResult> {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { sent: [], errors: orderIds.map(id => ({ orderNumber: id, error: 'Não autenticado' })) }
-
-  if (emails.length === 0) return { sent: [], errors: orderIds.map(id => ({ orderNumber: id, error: 'Nenhum email informado' })) }
+  if (!user) return { sent: [], errors: requests.map(r => ({ orderNumber: r.orderId, error: 'Não autenticado' })) }
 
   const apiKey = process.env.RESEND_API_KEY
   if (!apiKey) {
-    return { sent: [], errors: orderIds.map(id => ({ orderNumber: id, error: 'RESEND_API_KEY não configurada no servidor' })) }
+    return { sent: [], errors: requests.map(r => ({ orderNumber: r.orderId, error: 'RESEND_API_KEY não configurada no servidor' })) }
   }
 
   const { Resend } = await import('resend')
@@ -30,7 +36,12 @@ export async function sendOrdemPagamentoEmails(orderIds: string[], emails: strin
 
   const result: SendOrderEmailResult = { sent: [], errors: [] }
 
-  for (const orderId of orderIds) {
+  for (const { orderId, emails } of requests) {
+    if (emails.length === 0) {
+      result.errors.push({ orderNumber: orderId, error: 'Nenhum email informado' })
+      continue
+    }
+
     const data = await getOrdemPagamentoData(supabase, orderId)
     if (!data) {
       result.errors.push({ orderNumber: orderId, error: 'Ordem de pagamento não encontrada' })
