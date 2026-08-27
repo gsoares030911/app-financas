@@ -451,12 +451,19 @@ export default function EquipamentosClient({ rentals: initialRentals, producers,
       const buffer = await file.arrayBuffer()
       const wb = XLSX.read(buffer, { type: 'array', cellDates: true })
       const ws = wb.Sheets[wb.SheetNames[0]]
-      const rows = XLSX.utils.sheet_to_json<{ modelo?: string; instalação?: unknown }>(ws, { defval: null })
+      const rows = XLSX.utils.sheet_to_json<{ modelo?: string; instalação?: unknown; situação?: string }>(ws, { defval: null })
 
-      const parsed: { serial_number: string; received_at: string | null }[] = []
+      const parsed: { serial_number: string; received_at: string | null; returned_to_network: boolean }[] = []
       for (const row of rows) {
-        const serial = String(row.modelo ?? '').trim()
+        const modeloRaw = String(row.modelo ?? '').trim()
+        if (!modeloRaw) continue
+
+        // Relatório da Rede/Itaú vem como "laranjinha smart (SR056945)" — o
+        // número de série fica entre parênteses; sem parênteses, usa o texto todo.
+        const serialMatch = modeloRaw.match(/\(([^)]+)\)\s*$/)
+        const serial = (serialMatch ? serialMatch[1] : modeloRaw).trim()
         if (!serial) continue
+
         let received_at: string | null = null
         const raw = row['instalação']
         if (raw instanceof Date && !isNaN(raw.getTime())) {
@@ -465,7 +472,11 @@ export default function EquipamentosClient({ rentals: initialRentals, producers,
           const d = new Date(raw.trim())
           if (!isNaN(d.getTime())) received_at = d.toISOString().split('T')[0]
         }
-        parsed.push({ serial_number: serial, received_at })
+
+        const situacao = String(row['situação'] ?? '').trim().toLowerCase()
+        const returned_to_network = situacao.length > 0 && situacao !== 'ativa'
+
+        parsed.push({ serial_number: serial, received_at, returned_to_network })
       }
 
       if (parsed.length === 0) {
@@ -488,9 +499,13 @@ export default function EquipamentosClient({ rentals: initialRentals, producers,
         return
       }
 
+      const returnedCount = toInsert.filter(p => p.returned_to_network).length
+      const returnedNote = returnedCount > 0
+        ? ` ${returnedCount} já entrará(ão) marcada(s) como devolvida(s) à operadora (situação "troca ou devolução" no arquivo).`
+        : ''
       const msg = skipped > 0
-        ? `Importar ${toInsert.length} máquina(s) nova(s)? (${skipped} já cadastrada(s) serão ignoradas)`
-        : `Importar ${toInsert.length} máquina(s)?`
+        ? `Importar ${toInsert.length} máquina(s) nova(s)? (${skipped} já cadastrada(s) serão ignoradas)${returnedNote}`
+        : `Importar ${toInsert.length} máquina(s)?${returnedNote}`
       if (!confirm(msg)) return
 
       const inserts = toInsert.map(p => ({
@@ -498,6 +513,7 @@ export default function EquipamentosClient({ rentals: initialRentals, producers,
         model: p.serial_number,
         operator: 'Rede',
         received_at: p.received_at,
+        returned_to_network: p.returned_to_network,
       }))
 
       const { error } = await supabase.from('machines').insert(inserts)
