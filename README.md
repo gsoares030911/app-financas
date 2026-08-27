@@ -40,6 +40,10 @@ Sistema de gestão financeira da plataforma Bilheteria Express, desenvolvido com
   - Config da empresa pagadora salva no Supabase (compartilhada entre usuários/máquinas)
 - Documento imprimível por OP com dados do produtor, eventos e conta corrente
   - Coluna **Despesas** na tabela de eventos: soma real de todos os débitos (`account_entries`) vinculados ao evento — inclui taxa cartão/PIX, taxa de impressão, voucher/dinheiro e demais débitos (não apenas a taxa da plataforma)
+- **Envio por e-mail (aba Pagas)**: selecione uma ou mais OPs já pagas e clique em **"Enviar Email"** — abre modal agrupado por produtor, com campo de destinatários próprio por produtor (pré-preenchido com o e-mail cadastrado, editável, aceita múltiplos e-mails separados por vírgula)
+  - Gera o PDF da OP no servidor (`@react-pdf/renderer`, sem Chromium) e envia via [Resend](https://resend.com), um e-mail por OP com o PDF anexado
+  - **Isolamento por produtor obrigatório**: cada OP só é enviada para os e-mails informados no grupo daquele produtor — nunca para os e-mails de outro produtor selecionado na mesma leva (protege dados bancários)
+  - Requer `RESEND_API_KEY` configurada (ver seção *Rodando localmente*); sem domínio próprio verificado no Resend, a conta fica em modo sandbox e só envia para o e-mail do dono da conta Resend
 
 ### Equipamentos
 Página `/dashboard/equipamentos` com duas abas:
@@ -70,6 +74,7 @@ Página `/dashboard/equipamentos` com duas abas:
 
 **Aba — Máquinas**
 - **Importação via Excel**: botão "Importar Excel" abre seletor de arquivo `.xlsx`; colunas esperadas: `modelo` (serial) e `instalação` (data). Operadora padrão: `Rede`. Anti-duplicidade por `serial_number` — máquinas já cadastradas são ignoradas, exibindo contagem antes de confirmar.
+  - **Compatível com o relatório Rede/Itaú**: aceita o arquivo exportado direto do banco sem edição — extrai o serial de `"laranjinha smart (SR056945)"` (texto entre parênteses) e lê a coluna `situação`: linhas com `troca ou devolução` já entram cadastradas como "Dev. à Operadora"
 - **Reverter devolução**: ao editar uma máquina marcada como "Dev. à Operadora", aparece bloco laranja com botão "Reverter devolução" — retorna ao status "No escritório" e limpa a data de devolução.
 - **Data de devolução visível**: máquinas devolvidas exibem "Devolvida em DD/MM/AAAA" abaixo do badge na coluna Status/Localização — histórico sem coluna extra.
 - Rastreamento físico de cada equipamento: **No escritório** · **Com Produtor** · **No PDV** · **Devolvida**
@@ -136,6 +141,8 @@ Página `/dashboard/equipamentos` com duas abas:
 - [Supabase](https://supabase.com) — PostgreSQL + autenticação + Row Level Security
 - [Tailwind CSS v4](https://tailwindcss.com)
 - [shadcn/ui](https://ui.shadcn.com)
+- [Resend](https://resend.com) — envio de e-mails transacionais (OP paga com PDF anexado)
+- [@react-pdf/renderer](https://react-pdf.org) — geração de PDF no servidor, sem Chromium
 - TypeScript estrito
 
 ## Rodando localmente
@@ -155,9 +162,13 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=...
 SUPABASE_SERVICE_ROLE_KEY=...
 BILHETERIA_API_TOKEN=...
 CRON_SECRET=...
+RESEND_API_KEY=...
+RESEND_FROM_EMAIL=Bilheteria Express <onboarding@resend.dev>
 ```
 
 > `CRON_SECRET`: string segura qualquer (ex: `be-equipamentos-2026`). Deve ser adicionada também em **Vercel → Settings → Environment Variables** para que o Cron Job de equipamentos funcione em produção.
+
+> `RESEND_API_KEY`: gerada em [resend.com/api-keys](https://resend.com/api-keys). Sem domínio próprio verificado em [resend.com/domains](https://resend.com/domains), a conta fica em modo sandbox e só envia e-mails para o endereço do dono da conta Resend — troque `RESEND_FROM_EMAIL` para um endereço do domínio verificado assim que ele estiver pronto. Também deve ser adicionada em **Vercel → Settings → Environment Variables**.
 
 ## Deploy
 
