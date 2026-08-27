@@ -19,7 +19,7 @@ import {
 } from '@/components/ui/table'
 import { formatCurrency, formatDate } from '@/lib/utils/format'
 import { CATEGORY_LABELS, CATEGORY_COLORS, SYSTEM_CATEGORIES } from '@/lib/types'
-import type { Producer, AccountEntry, ProducerEvent, EquipmentRental, Category } from '@/lib/types'
+import type { Producer, AccountEntry, ProducerEvent, EquipmentRental, Category, Machine } from '@/lib/types'
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
@@ -33,6 +33,7 @@ interface Props {
   entries: AccountEntry[]
   events: ProducerEvent[]
   rentals: EquipmentRental[]
+  machines?: Machine[]
   categories?: Category[]
   userId: string
   paidOrders?: Array<{ amount: number; event_ids: string[] }>
@@ -41,7 +42,7 @@ interface Props {
 }
 
 
-export default function ProducerStatementClient({ producer: initialProducer, entries, events, rentals, categories: propCategories, userId, paidOrders = [], emittedEventIds = [], isReadOnly = false }: Props) {
+export default function ProducerStatementClient({ producer: initialProducer, entries, events, rentals, machines = [], categories: propCategories, userId, paidOrders = [], emittedEventIds = [], isReadOnly = false }: Props) {
   const systemCats = SYSTEM_CATEGORIES.map(c => ({ ...c, id: c.slug, user_id: '', created_at: '' }))
   const cats = (propCategories && propCategories.length > 0) ? propCategories : systemCats
   const catLabels: Record<string, string> = Object.fromEntries(cats.map(c => [c.slug, c.name]))
@@ -982,6 +983,7 @@ export default function ProducerStatementClient({ producer: initialProducer, ent
         onOpenChange={(v) => { setRentalOpen(v); if (!v) setEditRental(null) }}
         producerId={producer.id}
         rental={editRental}
+        machines={machines}
       />
       <ProducerForm
         open={editingProducer}
