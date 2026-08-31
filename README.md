@@ -33,7 +33,9 @@ Sistema de gestão financeira da plataforma Bilheteria Express, desenvolvido com
 - Exclusão de OP pendente: reverte eventos para Pendente
 - **Exportação CNAB 240 Itaú** (`.rem`) para múltiplas OPs selecionadas
   - Layout oficial SISPAG versão 085 (outubro/2020)
-  - Suporte a **PIX** (lote forma `45`, Segmento A + B) e **TED** (lote forma `41`) no mesmo arquivo
+  - Suporte a **PIX** (lote forma `45`, Segmento A + B) e **TED** (lote forma `41`)
+  - **Um arquivo `.rem` por forma de pagamento**: PIX e TED nunca saem juntos no mesmo arquivo — exigência do manual SISPAG (lotes PIX devem ser enviados em arquivo de remessa separado); ao selecionar OPs mistas, o botão baixa `CNAB240_ITAU_PIX_<data>.rem` e `CNAB240_ITAU_TED_<data>.rem`
+  - **Tipo de Pagamento por forma**: PIX usa `98` (Diversos) — `20` (Fornecedores) é rejeitado pelo validador do Itaú para forma `45`; TED usa `20` (Fornecedores)
   - PIX tem prioridade: produtores com chave PIX cadastrada usam lote PIX; demais usam TED
   - Detecção automática do tipo de chave PIX (CPF/CNPJ, e-mail, telefone, aleatória)
   - **CPF/CNPJ do favorecido** obrigatório: Segmento B PIX (pos 18-32) e Segmento A TED (pos 204-217) — campo cadastrado no perfil do produtor; modal CNAB valida antes de gerar

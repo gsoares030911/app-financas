@@ -110,20 +110,32 @@ export default function ExportarCNABModal({ orders, producers, cnabConfig, onClo
     })
 
     try {
-      const conteudo = gerarCNAB240Itau(empresa, pagamentos)
-      const blob = new Blob([conteudo], { type: 'text/plain;charset=utf-8' })
-      const url  = URL.createObjectURL(blob)
-      const a    = document.createElement('a')
+      // PIX e TED sempre saem em arquivos .rem separados — exigência do manual
+      // SISPAG Itaú (lotes PIX não podem ser combinados com outras formas no
+      // mesmo arquivo de remessa).
+      const arquivos = gerarCNAB240Itau(empresa, pagamentos)
       const hoje = new Date().toISOString().split('T')[0].replace(/-/g, '')
-      a.href     = url
-      a.download = `CNAB240_ITAU_${hoje}.rem`
-      a.click()
-      URL.revokeObjectURL(url)
-      toast.success(`Arquivo CNAB 240 gerado com ${orders.length} pagamento${orders.length > 1 ? 's' : ''}`)
+
+      arquivos.forEach(({ tipo, conteudo }) => {
+        const blob = new Blob([conteudo], { type: 'text/plain;charset=utf-8' })
+        const url  = URL.createObjectURL(blob)
+        const a    = document.createElement('a')
+        a.href     = url
+        a.download = `CNAB240_ITAU_${tipo}_${hoje}.rem`
+        a.click()
+        URL.revokeObjectURL(url)
+      })
+
+      const resumo = arquivos.map(f => `${nPagamentosPorTipo(f.tipo, pagamentos)} via ${f.tipo}`).join(' + ')
+      toast.success(`${arquivos.length > 1 ? `${arquivos.length} arquivos` : 'Arquivo'} CNAB 240 gerado${arquivos.length > 1 ? 's' : ''} (${resumo})`)
       onClose()
     } catch (err) {
       toast.error('Erro ao gerar arquivo: ' + String(err))
     }
+  }
+
+  function nPagamentosPorTipo(tipo: 'PIX' | 'TED', pagamentos: PagamentoCNAB[]): number {
+    return pagamentos.filter(p => (tipo === 'PIX') === !!p.pixKey?.trim()).length
   }
 
   const nPix = orders.filter(o => !!producerMap.get(o.producer_id)?.pix_key?.trim()).length

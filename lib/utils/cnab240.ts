@@ -146,13 +146,13 @@ function buildHeaderArquivo(empresa: EmpresaConfig, cnpj: string, empAg: string,
   return hArq
 }
 
-function buildHeaderLote(loteNum: string, forma: string, empresa: EmpresaConfig, cnpj: string, empAg: string, empCt: string, empDct: string): string {
+function buildHeaderLote(loteNum: string, forma: string, tipoPagamento: string, empresa: EmpresaConfig, cnpj: string, empAg: string, empCt: string, empDct: string): string {
   const hLote =
     n('341', 3)               // 001-003  Código banco
     + n(loteNum, 4)           // 004-007  Lote
     + '1'                     // 008      Tipo registro
     + 'C'                     // 009      Tipo operação = Crédito
-    + '20'                    // 010-011  Tipo pagamento = Fornecedores
+    + tipoPagamento           // 010-011  Tipo pagamento (20=Fornecedores/TED, 98=Diversos/PIX — NOTA cnab)
     + forma                   // 012-013  Forma pagamento (41=TED, 45=PIX)
     + '040'                   // 014-016  Versão layout lote
     + ' '                     // 017      Branco
@@ -308,7 +308,60 @@ function buildTrailerLote(loteNum: string, qtdRegistros: number, totalValor: num
 // Função principal
 // ──────────────────────────────────────────────────────────────
 
-export function gerarCNAB240Itau(empresa: EmpresaConfig, pagamentos: PagamentoCNAB[]): string {
+export interface ArquivoCNAB {
+  tipo: 'PIX' | 'TED'
+  conteudo: string
+}
+
+// Monta um arquivo CNAB 240 completo (header arquivo + 1 lote + trailer arquivo)
+// contendo só pagamentos de uma mesma forma. O manual SISPAG (NOTA "Observação",
+// pág. 7) exige que lotes PIX sejam enviados em arquivo separado dos demais —
+// por isso PIX e TED nunca são combinados no mesmo arquivo de remessa.
+function montarArquivo(
+  empresa: EmpresaConfig, cnpj: string, empAg: string, empCt: string, empDct: string, now: Date,
+  pagamentos: PagamentoCNAB[], forma: '41' | '45', tipoPagamento: string,
+): string {
+  const linhas: string[] = []
+  linhas.push(buildHeaderArquivo(empresa, cnpj, empAg, empCt, empDct, now))
+
+  const loteNum = '0001'
+  linhas.push(buildHeaderLote(loteNum, forma, tipoPagamento, empresa, cnpj, empAg, empCt, empDct))
+
+  let total = 0
+  pagamentos.forEach((pag, idx) => {
+    const seq = idx + 1
+    total += pag.valor
+    if (forma === '45') {
+      linhas.push(buildSegmentoA_PIX(loteNum, seq, pag))
+      linhas.push(buildSegmentoB_PIX(loteNum, seq, pag))
+    } else {
+      linhas.push(buildSegmentoA_TED(loteNum, seq, pag))
+    }
+  })
+
+  // Header(1) + [A+B ou A] por pagamento + Trailer(1)
+  const registrosPorPagamento = forma === '45' ? 2 : 1
+  const qtdRegistros = 1 + pagamentos.length * registrosPorPagamento + 1
+  linhas.push(buildTrailerLote(loteNum, qtdRegistros, total))
+
+  const qtdRegistrosArquivo = linhas.length + 1
+  const tArq =
+    n('341', 3)               // 001-003
+    + n('9999', 4)            // 004-007  Lote = 9999
+    + '9'                     // 008      Tipo registro = trailer arquivo
+    + br(9)                   // 009-017  Brancos
+    + n('1', 6)                // 018-023  Qtd lotes (sempre 1 — arquivo de forma única)
+    + n(String(qtdRegistrosArquivo), 6) // 024-029 Qtd registros
+    + br(211)                 // 030-240  Brancos
+  assertLen('Trailer arquivo', tArq)
+  linhas.push(tArq)
+
+  return linhas.join('\r\n') + '\r\n'
+}
+
+// Retorna um arquivo por forma de pagamento presente na leva (PIX e TED nunca
+// são combinados no mesmo .rem — ver NOTA em montarArquivo).
+export function gerarCNAB240Itau(empresa: EmpresaConfig, pagamentos: PagamentoCNAB[]): ArquivoCNAB[] {
   if (!pagamentos.length) throw new Error('Nenhum pagamento informado')
 
   const now  = new Date()
@@ -319,60 +372,16 @@ export function gerarCNAB240Itau(empresa: EmpresaConfig, pagamentos: PagamentoCN
   const tedPagamentos = pagamentos.filter(p => !p.pixKey?.trim())
   const pixPagamentos = pagamentos.filter(p =>  p.pixKey?.trim())
 
-  const linhas: string[] = []
-  linhas.push(buildHeaderArquivo(empresa, cnpj, empAg, empCt, empDct, now))
+  const arquivos: ArquivoCNAB[] = []
 
-  let numLotes = 0
-
-  // ── Lote PIX (forma 45) ───────────────────────────────────
   if (pixPagamentos.length > 0) {
-    numLotes++
-    const loteNum = String(numLotes).padStart(4, '0')
-    linhas.push(buildHeaderLote(loteNum, '45', empresa, cnpj, empAg, empCt, empDct))
-
-    let totalPix = 0
-    pixPagamentos.forEach((pag, idx) => {
-      const seq = idx + 1
-      totalPix += pag.valor
-      linhas.push(buildSegmentoA_PIX(loteNum, seq, pag))
-      linhas.push(buildSegmentoB_PIX(loteNum, seq, pag))
-    })
-
-    // Header(1) + A+B por pagamento + Trailer(1)
-    const qtdRegistros = 1 + pixPagamentos.length * 2 + 1
-    linhas.push(buildTrailerLote(loteNum, qtdRegistros, totalPix))
+    // Tipo Pagamento "20" (Fornecedores) é rejeitado pelo validador do Itaú para
+    // forma PIX (45) — usar "98" (Diversos), também válido conforme o manual SISPAG.
+    arquivos.push({ tipo: 'PIX', conteudo: montarArquivo(empresa, cnpj, empAg, empCt, empDct, now, pixPagamentos, '45', '98') })
   }
-
-  // ── Lote TED (forma 41) ───────────────────────────────────
   if (tedPagamentos.length > 0) {
-    numLotes++
-    const loteNum = String(numLotes).padStart(4, '0')
-    linhas.push(buildHeaderLote(loteNum, '41', empresa, cnpj, empAg, empCt, empDct))
-
-    let totalTed = 0
-    tedPagamentos.forEach((pag, idx) => {
-      const seq = idx + 1
-      totalTed += pag.valor
-      linhas.push(buildSegmentoA_TED(loteNum, seq, pag))
-    })
-
-    // Header(1) + A por pagamento + Trailer(1)
-    const qtdRegistros = 1 + tedPagamentos.length + 1
-    linhas.push(buildTrailerLote(loteNum, qtdRegistros, totalTed))
+    arquivos.push({ tipo: 'TED', conteudo: montarArquivo(empresa, cnpj, empAg, empCt, empDct, now, tedPagamentos, '41', '20') })
   }
 
-  // ── Trailer de Arquivo ────────────────────────────────────
-  const qtdRegistrosArquivo = linhas.length + 1
-  const tArq =
-    n('341', 3)               // 001-003
-    + n('9999', 4)            // 004-007  Lote = 9999
-    + '9'                     // 008      Tipo registro = trailer arquivo
-    + br(9)                   // 009-017  Brancos
-    + n(String(numLotes), 6)  // 018-023  Qtd lotes
-    + n(String(qtdRegistrosArquivo), 6) // 024-029 Qtd registros
-    + br(211)                 // 030-240  Brancos
-  assertLen('Trailer arquivo', tArq)
-  linhas.push(tArq)
-
-  return linhas.join('\r\n') + '\r\n'
+  return arquivos
 }
