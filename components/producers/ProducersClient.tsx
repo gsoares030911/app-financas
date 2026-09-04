@@ -3,7 +3,7 @@
 import { useState, useMemo, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Plus, Search, Users, TrendingUp, TrendingDown, ChevronRight, FileText, Loader2, CalendarClock, Upload, ChevronLeft } from 'lucide-react'
+import { Plus, Search, Users, TrendingUp, TrendingDown, ChevronRight, FileText, Loader2, CalendarClock, Upload, ChevronLeft, Info } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent } from '@/components/ui/card'
@@ -279,6 +279,13 @@ export default function ProducersClient({
 
   const periodTotal      = periodPayables.reduce((s, p) => s + p.payable, 0)
   const periodEventCount = periodPayables.reduce((s, p) => s + p.eventIds.length, 0)
+
+  // Produtores com saldo devedor no período — ficam de fora da emissão de OP
+  // (não dá pra emitir OP negativa), por isso o total do lote é maior que o
+  // "A Pagar no período" (que já desconta essa dívida no cálculo líquido).
+  const negativePeriod      = periodPayables.filter(p => p.payable < 0)
+  const negativePeriodCount = negativePeriod.length
+  const negativePeriodTotal = negativePeriod.reduce((s, p) => s + p.payable, 0)
 
   function toggleExclude(id: string) {
     setExcluded(prev => {
@@ -617,6 +624,17 @@ export default function ProducersClient({
               </>
             )}
           </div>
+          {periodActive && !periodLoading && negativePeriodCount > 0 && (
+            <div className="mt-2 flex items-start gap-1.5 text-xs text-gray-500">
+              <Info className="h-3.5 w-3.5 mt-0.5 shrink-0 text-gray-400" />
+              <span>
+                {negativePeriodCount} produtor{negativePeriodCount !== 1 ? 'es' : ''} com saldo devedor no período
+                ({formatCurrency(Math.abs(negativePeriodTotal))}) não {negativePeriodCount !== 1 ? 'entram' : 'entra'} neste lote —
+                não é possível emitir OP negativa. A dívida continua na conta corrente e já está descontada no card
+                &quot;A Pagar no período&quot; acima, por isso os dois totais são diferentes.
+              </span>
+            </div>
+          )}
         </CardContent>
       </Card>
 
