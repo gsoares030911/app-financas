@@ -9,7 +9,7 @@ export async function getCnabConfig(): Promise<Partial<EmpresaConfig>> {
   const supabase = await createClient()
   const { data } = await supabase
     .from('cnab_config')
-    .select('cnpj, nome, agencia, digito_agencia, conta, digito_conta')
+    .select('cnpj, nome, agencia, digito_agencia, conta, digito_conta, limite_diario')
     .eq('id', CONFIG_ID)
     .single()
   if (!data) return {}
@@ -20,6 +20,7 @@ export async function getCnabConfig(): Promise<Partial<EmpresaConfig>> {
     digitoAgencia: data.digito_agencia ?? '',
     conta:        data.conta        ?? '',
     digitoConta:  data.digito_conta ?? '',
+    limiteDiario: data.limite_diario !== null && data.limite_diario !== undefined ? Number(data.limite_diario) : null,
   }
 }
 
@@ -30,17 +31,18 @@ export async function saveCnabConfig(config: EmpresaConfig): Promise<{ error?: s
 
   const { error } = await supabase
     .from('cnab_config')
-    .update({
+    .upsert({
+      id:            CONFIG_ID,
       cnpj:          config.cnpj,
       nome:          config.nome,
       agencia:       config.agencia,
       digito_agencia: config.digitoAgencia,
       conta:         config.conta,
       digito_conta:  config.digitoConta,
+      limite_diario: config.limiteDiario ?? null,
       updated_at:    new Date().toISOString(),
       updated_by:    user.id,
     })
-    .eq('id', CONFIG_ID)
 
   if (error) return { error: error.message }
   return {}

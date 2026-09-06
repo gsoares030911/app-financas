@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react'
 import { Download, X, AlertCircle, Building2, Save } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { CurrencyInput } from '@/components/ui/currency-input'
 import { gerarCNAB240Itau, resolveBank, detectPixKeyType, type EmpresaConfig, type PagamentoCNAB } from '@/lib/utils/cnab240'
 import { saveCnabConfig } from '@/app/actions/cnabConfig'
 import { toast } from 'sonner'
@@ -33,10 +34,15 @@ export default function ExportarCNABModal({ orders, producers, cnabConfig, onClo
   const [conta,    setConta]    = useState(cnabConfig?.conta        ?? '')
   const [digitoCt, setDigitoCt] = useState(cnabConfig?.digitoConta  ?? '')
   const [dataPgto, setDataPgto] = useState(nextBusinessDay())
+  const [limiteDiario, setLimiteDiario] = useState(
+    cnabConfig?.limiteDiario ? String(cnabConfig.limiteDiario) : ''
+  )
   const [erros,    setErros]    = useState<string[]>([])
   const [saving,   startSave]   = useTransition()
 
   const producerMap = new Map(producers.map(p => [p.id, p]))
+  const totalSelecionado = orders.reduce((s, o) => s + Number(o.amount), 0)
+  const limiteDiarioNum = limiteDiario ? Number(limiteDiario) : null
 
   function buildEmpresa(): EmpresaConfig {
     return {
@@ -46,6 +52,7 @@ export default function ExportarCNABModal({ orders, producers, cnabConfig, onClo
       digitoAgencia: digitoAg.trim(),
       conta:         conta.replace(/\D/g, ''),
       digitoConta:   digitoCt.trim(),
+      limiteDiario:  limiteDiarioNum,
     }
   }
 
@@ -56,6 +63,14 @@ export default function ExportarCNABModal({ orders, producers, cnabConfig, onClo
     if (!agencia.replace(/\D/g, '')) e.push('Agência obrigatória')
     if (!conta.replace(/\D/g, ''))   e.push('Conta obrigatória')
     if (!dataPgto)                 e.push('Data de pagamento obrigatória')
+
+    if (limiteDiarioNum != null && limiteDiarioNum > 0 && totalSelecionado > limiteDiarioNum) {
+      e.push(
+        `Total selecionado (${totalSelecionado.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}) ` +
+        `excede o limite diário configurado (${limiteDiarioNum.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}) ` +
+        `para ${new Date(dataPgto + 'T12:00:00').toLocaleDateString('pt-BR')} — remova algumas OPs da seleção ou gere um arquivo separado em outra data.`
+      )
+    }
 
     orders.forEach(order => {
       const prod = producerMap.get(order.producer_id)
@@ -221,15 +236,38 @@ export default function ExportarCNABModal({ orders, producers, cnabConfig, onClo
             </div>
           </div>
 
-          {/* Data de pagamento */}
-          <div>
-            <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1 block">
-              Data de Pagamento
-            </label>
-            <Input type="date" value={dataPgto} onChange={e => setDataPgto(e.target.value)}
-              className="h-8 text-sm w-44" />
-            <p className="text-xs text-gray-400 mt-1">Próximo dia útil sugerido automaticamente</p>
+          {/* Data de pagamento + limite diário */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1 block">
+                Data de Pagamento
+              </label>
+              <Input type="date" value={dataPgto} onChange={e => setDataPgto(e.target.value)}
+                className="h-8 text-sm w-44" />
+              <p className="text-xs text-gray-400 mt-1">Próximo dia útil sugerido automaticamente</p>
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1 block">
+                Limite Diário do Banco (opcional)
+              </label>
+              <CurrencyInput value={limiteDiario} onValueChange={setLimiteDiario} className="h-8 text-sm" />
+              <p className="text-xs text-gray-400 mt-1">Avisa se o total selecionado ultrapassar</p>
+            </div>
           </div>
+
+          {limiteDiarioNum != null && limiteDiarioNum > 0 && (
+            <div className={`flex items-center justify-between text-xs rounded-lg px-3 py-2 border ${
+              totalSelecionado > limiteDiarioNum
+                ? 'bg-red-50 border-red-200 text-red-700'
+                : 'bg-gray-50 border-gray-200 text-gray-500'
+            }`}>
+              <span>Total selecionado</span>
+              <span className="font-semibold">
+                {totalSelecionado.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                {' '}/ {limiteDiarioNum.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+              </span>
+            </div>
+          )}
 
           {/* Resumo PIX / TED */}
           {nPix > 0 && nTed > 0 && (

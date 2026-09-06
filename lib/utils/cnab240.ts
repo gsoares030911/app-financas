@@ -100,6 +100,7 @@ export interface EmpresaConfig {
   digitoAgencia: string
   conta: string        // "12345" ou "12345-6"
   digitoConta: string
+  limiteDiario?: number | null // teto bancário de pagamento/dia — não faz parte do layout CNAB, só usado para avisar na exportação
 }
 
 export interface PagamentoCNAB {
