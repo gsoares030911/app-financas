@@ -80,10 +80,24 @@ function buildAgenciaConta(bankCode: string, ag: string, ct: string, dct: string
 
 // Detecta tipo de chave PIX (NOTA 37)
 // 01=telefone 02=email 03=CPF/CNPJ 04=chave aleatória
-export function detectPixKeyType(key: string): '01' | '02' | '03' | '04' {
+//
+// Celular com DDD (11 dígitos) e CPF (11 dígitos) têm o MESMO tamanho — não dá
+// pra diferenciar só pela quantidade de dígitos. Por isso recebe os campos
+// cadastrados do produtor (cpfCnpj/phone) pra desambiguar: se a chave bater
+// com o telefone cadastrado (e não com o CPF/CNPJ), é celular, não CPF.
+// Sem esses parâmetros, mantém o fallback antigo (assume CPF/CNPJ em 11/14
+// dígitos) — mas isso pode classificar errado e ser recusado pelo Banco
+// Central, então sempre que possível passe cpfCnpj/phone.
+export function detectPixKeyType(key: string, cpfCnpj?: string, phone?: string): '01' | '02' | '03' | '04' {
   const clean = key.trim()
   if (clean.includes('@')) return '02'
   const digits = clean.replace(/\D/g, '')
+  const cpfCnpjDigits = (cpfCnpj ?? '').replace(/\D/g, '')
+  const phoneDigits   = (phone ?? '').replace(/\D/g, '')
+
+  if (digits.length === 11 && phoneDigits && digits === phoneDigits && digits !== cpfCnpjDigits) {
+    return '01' // celular com DDD — 11 dígitos, mas bate com o telefone cadastrado, não com o CPF
+  }
   if (digits.length === 11 || digits.length === 14) return '03'
   if (digits.length >= 10 && digits.length <= 13 && /^\+?[\d\s()\-]+$/.test(clean)) return '01'
   return '04'
@@ -111,6 +125,7 @@ export interface PagamentoCNAB {
   agencia: string      // "1234" (ignorado em PIX via chave)
   conta: string        // "12345" (ignorado em PIX via chave)
   pixKey?: string      // chave PIX — se informada, usa lote PIX (forma 45)
+  phone?: string       // telefone cadastrado do favorecido — usado só para desambiguar chave PIX celular vs CPF (ambos têm 11 dígitos)
   valor: number
   dataPagamento: Date
 }
@@ -266,7 +281,7 @@ function buildSegmentoA_PIX(loteNum: string, seq: number, pag: PagamentoCNAB): s
 // Segmento B PIX — obrigatório (pág. 18 do layout SISPAG 085)
 function buildSegmentoB_PIX(loteNum: string, seq: number, pag: PagamentoCNAB): string {
   const pixKey     = pag.pixKey ?? ''
-  const keyType    = detectPixKeyType(pixKey)
+  const keyType    = detectPixKeyType(pixKey, pag.cpfCnpj, pag.phone)
   const cpfCnpjRaw = (pag.cpfCnpj ?? '').replace(/\D/g, '')
   const tipoInscr  = cpfCnpjRaw.length === 14 ? '2' : '1'
   const cpfCnpj    = n(cpfCnpjRaw, 14)

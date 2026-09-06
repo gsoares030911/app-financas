@@ -39,6 +39,9 @@ yarn-error.log*
 # netlify (plugins gerados automaticamente)
 .netlify/
 
+# supabase CLI (cache local)
+supabase/.temp/
+
 # claude code (configurações locais)
 .claude/
 

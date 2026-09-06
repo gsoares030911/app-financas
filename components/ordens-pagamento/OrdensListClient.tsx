@@ -13,7 +13,7 @@ import EnviarEmailModal from './EnviarEmailModal'
 import type { PaymentOrder, Producer } from '@/lib/types'
 import type { EmpresaConfig } from '@/lib/utils/cnab240'
 
-type ProducerBankInfo = Pick<Producer, 'id' | 'full_name' | 'email' | 'cpf_cnpj' | 'bank_name' | 'bank_agency' | 'bank_account' | 'pix_key'>
+type ProducerBankInfo = Pick<Producer, 'id' | 'full_name' | 'email' | 'phone' | 'cpf_cnpj' | 'bank_name' | 'bank_agency' | 'bank_account' | 'pix_key'>
 
 interface Props {
   orders: PaymentOrder[]

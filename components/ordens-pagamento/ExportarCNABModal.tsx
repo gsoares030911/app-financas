@@ -10,7 +10,7 @@ import { saveCnabConfig } from '@/app/actions/cnabConfig'
 import { toast } from 'sonner'
 import type { PaymentOrder, Producer } from '@/lib/types'
 
-type ProducerBankInfo = Pick<Producer, 'id' | 'full_name' | 'cpf_cnpj' | 'bank_name' | 'bank_agency' | 'bank_account' | 'pix_key'>
+type ProducerBankInfo = Pick<Producer, 'id' | 'full_name' | 'phone' | 'cpf_cnpj' | 'bank_name' | 'bank_agency' | 'bank_account' | 'pix_key'>
 
 interface Props {
   orders: PaymentOrder[]
@@ -119,6 +119,7 @@ export default function ExportarCNABModal({ orders, producers, cnabConfig, onClo
         agencia:        prod.bank_agency ?? '',
         conta:          prod.bank_account ?? '',
         pixKey:         prod.pix_key ?? undefined,
+        phone:          prod.phone ?? undefined,
         valor:          Number(order.amount),
         dataPagamento:  new Date(dataPgto + 'T12:00:00'),
       }
@@ -287,7 +288,7 @@ export default function ExportarCNABModal({ orders, producers, cnabConfig, onClo
             {orders.map(order => {
               const prod   = producerMap.get(order.producer_id)
               const isPix  = !!prod?.pix_key?.trim()
-              const kType  = isPix ? detectPixKeyType(prod!.pix_key!) : null
+              const kType  = isPix ? detectPixKeyType(prod!.pix_key!, prod!.cpf_cnpj ?? undefined, prod!.phone ?? undefined) : null
               return (
                 <div key={order.id} className="flex items-center justify-between px-3 py-2 text-xs">
                   <span className="font-mono text-blue-700 font-semibold">{order.order_number}</span>
