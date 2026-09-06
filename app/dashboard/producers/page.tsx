@@ -57,7 +57,6 @@ export default async function ProducersPage({
     producersQuery = supabase
       .from('producers')
       .select('*', { count: 'exact' })
-      .eq('user_id', user.id)
       .order('full_name')
       .range(from, to)
     if (q) producersQuery = producersQuery.ilike('full_name', `%${q}%`)
@@ -65,7 +64,6 @@ export default async function ProducersPage({
     producersQuery = supabase
       .from('producers_with_balance')
       .select('*', { count: 'exact' })
-      .eq('user_id', user.id)
       .order('full_name')
       .range(from, to)
     if (activeFilter === 'a_pagar') producersQuery = producersQuery.gt('balance', 0)
