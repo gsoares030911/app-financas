@@ -37,8 +37,9 @@ Sistema de gestão financeira da plataforma Bilheteria Express, desenvolvido com
   - **Um arquivo `.rem` por forma de pagamento**: PIX e TED nunca saem juntos no mesmo arquivo — exigência do manual SISPAG (lotes PIX devem ser enviados em arquivo de remessa separado); ao selecionar OPs mistas, o botão baixa `CNAB240_ITAU_PIX_<data>.rem` e `CNAB240_ITAU_TED_<data>.rem`
   - **Tipo de Pagamento por forma**: PIX usa `98` (Diversos) — `20` (Fornecedores) é rejeitado pelo validador do Itaú para forma `45`; TED usa `20` (Fornecedores)
   - PIX tem prioridade: produtores com chave PIX cadastrada usam lote PIX; demais usam TED
-  - Detecção automática do tipo de chave PIX (CPF/CNPJ, e-mail, telefone, aleatória)
+  - **Detecção do tipo de chave PIX** (CPF/CNPJ, e-mail, telefone, aleatória) — celular com DDD e CPF têm os dois 11 dígitos, então a chave é comparada com o telefone/CPF cadastrados do produtor para desambiguar (evita a chave ser enviada com o tipo errado e recusada pelo Banco Central/DICT)
   - **CPF/CNPJ do favorecido** obrigatório: Segmento B PIX (pos 18-32) e Segmento A TED (pos 204-217) — campo cadastrado no perfil do produtor; modal CNAB valida antes de gerar
+  - **Limite Diário do Banco** (opcional, salvo junto com os dados da empresa): se o total das OPs selecionadas para a Data de Pagamento ultrapassar o limite configurado, a geração do arquivo é bloqueada com aviso — não há distribuição automática entre dias, a triagem de quais OPs ficam para qual data é manual
   - Config da empresa pagadora salva no Supabase (compartilhada entre usuários/máquinas)
 - Documento imprimível por OP com dados do produtor, eventos e conta corrente
   - Coluna **Despesas** na tabela de eventos: soma real de todos os débitos (`account_entries`) vinculados ao evento — inclui taxa cartão/PIX, taxa de impressão, voucher/dinheiro e demais débitos (não apenas a taxa da plataforma)
